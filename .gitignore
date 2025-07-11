@@ -1,5 +1,9 @@
+build/
+
 .idea/
 .vs/
+
+
 *.exe
 *.pdb
 *.mdb
