@@ -1,0 +1,11 @@
+9 // first 4 bytes reserved for main function position
+
+func 2   // define func
+larg_s32 // load first  32 bit integer argument
+larg_s32 // load second 32 bit integer argument
+add      // add last 2 32 bit integers from stack
+ret_s32
+
+func 0 // main function
+call 3 // call
+ret_s32
