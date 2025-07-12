@@ -16,7 +16,7 @@ public enum Opcode : ushort {
     // push argument at specified index on stack
     larg      = 7,
     // push local variable at specified index on stack
-    lloc      = 8,
+    llocal    = 8,
     // pop from stack and set this value to local variable at specified index
-    sloc      = 9,
+    slocal    = 9,
 }

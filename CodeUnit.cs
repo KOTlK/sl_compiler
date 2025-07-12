@@ -50,37 +50,37 @@ public unsafe class CodeUnit {
         Push(index);
     }
 
-    public void Pushlloc(byte index) {
-        Push(lloc);
+    public void Pushllocal(byte index) {
+        Push(llocal);
         Push(index);
     }
 
-    public void Pushsloc(byte index) {
-        Push(sloc);
+    public void Pushslocal(byte index) {
+        Push(slocal);
         Push(index);
     }
 
     // mono compiler calls this function instead of the one below. Why?
-    public int PushFunction(byte argCount, byte localsCount, uint retSize, List<ushort> argsAndLocals = null) {
-        Push(func);
-        Push(argCount);
-        Push(localsCount);
-        Push(retSize);
-        ushort offset = 0;
-        for (var i = 0; i < argCount; ++i) {
-            offset += argsAndLocals[i];
-            Push(offset);
-        }
+    // public int PushFunction(byte argCount, byte localsCount, uint retSize, List<ushort> argsAndLocals = null) {
+    //     Push(func);
+    //     Push(argCount);
+    //     Push(localsCount);
+    //     Push(retSize);
+    //     ushort offset = 0;
+    //     for (var i = 0; i < argCount; ++i) {
+    //         offset += argsAndLocals[i];
+    //         Push(offset);
+    //     }
 
-        offset = 0;
-        for (var i = argCount; i < localsCount; ++i) {
-            offset += argsAndLocals[i];
-            Push(offset);
-        }
-        var p = Count;
-        Functions.Add(p);
-        return p;
-    }
+    //     offset = 0;
+    //     for (var i = 0; i < localsCount; ++i) {
+    //         offset += argsAndLocals[argCount + i];
+    //         Push(offset);
+    //     }
+    //     var p = Count;
+    //     Functions.Add(p);
+    //     return p;
+    // }
 
     public int PushFunction(byte argCount, byte localsCount, uint retSize, params ushort[] argsAndLocals) {
         Push(func);
@@ -94,8 +94,8 @@ public unsafe class CodeUnit {
         }
 
         offset = 0;
-        for (var i = argCount; i < localsCount; ++i) {
-            offset += argsAndLocals[i];
+        for (var i = 0; i < localsCount; ++i) {
+            offset += argsAndLocals[argCount + i];
             Push(offset);
         }
         var p = Count;

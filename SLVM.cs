@@ -81,6 +81,14 @@ public static unsafe class SLVM {
                     for (var i = 0; i < argsCount; ++i) {
                         StackPush(Readu16(bytes, ref pc));
                     }
+
+                    ushort localOffset = 0;
+                    for (var i = 0; i < localsCount; ++i) {
+                        localOffset = Readu16(bytes, ref pc);
+                        StackPush(localOffset);
+                    }
+                    // reserve space for local variables
+                    StackPushZeros(localOffset);
                 } break;
                 case add_s32 : {
                     var a = StackPops32();
@@ -109,7 +117,13 @@ public static unsafe class SLVM {
                     }
 
                     StackCurrent = fp - back;
-                    StackPush(fp + (uint)argsCount * 2 + (uint)localsCount * 2, retSize);
+                    ushort localsOffset = 0;
+
+                    if (localsCount > 0) {
+                        localsOffset = ReadLocalOffset((byte)(localsCount - 1), fp);
+                    }
+                    var start = fp + (uint)argsCount * 2 + (uint)localsCount * 2 + localsOffset;
+                    StackPush(start, retSize);
                     fp = oldFp;
                     pc = oldPc;
                 } break;
@@ -125,11 +139,11 @@ public static unsafe class SLVM {
                     StackPushArg(index, fp);
                     break;
                 }
-                case lloc : {
+                case llocal : {
                     var index = Readu8(bytes, ref pc);
                     StackPushLocal(index, fp);
                 } break;
-                case sloc : {
+                case slocal : {
                     var index = Readu8(bytes, ref pc);
                     StackSetLocal(index, fp);
                 } break;
@@ -144,7 +158,11 @@ public static unsafe class SLVM {
     }
 
     public static byte ReadArgsCount(uint fp) {
-        return (Stack[fp - ArgsCountOffset]);
+        return Stack[fp - ArgsCountOffset];
+    }
+
+    public static byte ReadLocalsCount(uint fp) {
+        return Stack[fp - LocalsCountOffset];
     }
 
     public static uint ReadRetSize(uint fp) {
@@ -174,14 +192,6 @@ public static unsafe class SLVM {
         return s;
     }
 
-    public static uint ReadLocalsCount(uint fp) {
-        var s = (uint)(Stack[fp - LocalsCountOffset]           |
-                       Stack[fp - LocalsCountOffset - 1] << 8  |
-                       Stack[fp - LocalsCountOffset - 2] << 16 |
-                       Stack[fp - LocalsCountOffset - 3] << 24);
-
-        return s;
-    }
 
 
     public static Opcode ReadCode(byte[] bytes, ref uint ptr) {
@@ -531,6 +541,15 @@ public static unsafe class SLVM {
         StackPush(start, size);
     }
 
+    public static ushort ReadArgOffset(byte index, uint fp) {
+        var start = fp + index * 2;
+
+        var s = (ushort)(Stack[start + 0]   |
+                         Stack[start + 1] << 8);
+
+        return s;
+    }
+
     // @Incomplete
     public static void StackSetLocal(byte index, uint fp) {
         var argsCount   = (uint)ReadArgsCount(fp);
@@ -546,8 +565,39 @@ public static unsafe class SLVM {
             offset -= size;
         }
 
-        StackSet(StackCurrent - size, fp + argsCount * 2 + localsCount * 2 + offset, size);
+        var start = fp + argsCount * 2 + localsCount * 2 + offset;
+
+        var i = Stack[start]           |
+                Stack[start + 1] << 8  |
+                Stack[start + 2] << 16 |
+                Stack[start + 3] << 24;
+
+        StackSet(StackCurrent - size, start, size);
         StackCurrent -= size;
+    }
+
+    // @Debug
+    public static int StackReadLocal(byte index, uint fp) {
+        var argsCount   = (uint)ReadArgsCount(fp);
+        var localsCount = (uint)ReadLocalsCount(fp);
+        var offset      = ReadLocalOffset(index, fp);
+        var size        = offset;
+
+        if (index == 0) {
+            offset = 0;
+        } else {
+            size   -= ReadLocalOffset((byte)(index - 1), fp);
+            offset -= size;
+        }
+
+        var start = (fp + argsCount * 2 + localsCount * 2) + offset;
+
+        var i = Stack[start]           |
+                Stack[start + 1] << 8  |
+                Stack[start + 2] << 16 |
+                Stack[start + 3] << 24;
+
+        return i;
     }
 
     public static void StackPushLocal(byte index, uint fp) {
@@ -565,16 +615,12 @@ public static unsafe class SLVM {
 
         var start = (fp + argsCount * 2 + localsCount * 2) + offset;
 
+        var i = Stack[start]           |
+                Stack[start + 1] << 8  |
+                Stack[start + 2] << 16 |
+                Stack[start + 3] << 24;
+
         StackPush(start, size);
-    }
-
-    public static ushort ReadArgOffset(byte index, uint fp) {
-        var start = fp + index * 2;
-
-        var s = (ushort)(Stack[start + 0]   |
-                         Stack[start + 1] << 8);
-
-        return s;
     }
 
     public static ushort ReadLocalOffset(byte index, uint fp) {
@@ -599,6 +645,13 @@ public static unsafe class SLVM {
         }
 
         StackCurrent += size;
+    }
+
+    public static void StackPushZeros(uint count) {
+        for (uint i = 0; i < count; ++i) {
+            Stack[StackCurrent + i] = 0;
+        }
+        StackCurrent += count;
     }
 
     public static string BytecodeToString(byte[] bytes, int count) {
@@ -657,13 +710,13 @@ public static unsafe class SLVM {
                     var index = Readu8(bytes, ref pc);
                     sb.Append(index.ToString());
                 } break;
-                case lloc : {
+                case llocal : {
                     sb.Append(opcode.ToString());
                     sb.Append(' ');
                     var index = Readu8(bytes, ref pc);
                     sb.Append(index.ToString());
                 } break;
-                case sloc : {
+                case slocal : {
                     sb.Append(opcode.ToString());
                     sb.Append(' ');
                     var index = Readu8(bytes, ref pc);

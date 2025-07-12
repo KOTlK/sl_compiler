@@ -60,13 +60,13 @@ public static class Program {
 
         // Text.text = sb.ToString();
         var cu = new CodeUnit(256);
-        cu.PushFunction(2, 0, 4, 4, 4);
+        cu.PushFunction(2, 2, 4, 4, 4, 4, 4);
         cu.Pushlarg(0);
-        cu.Pushsloc(0);
+        cu.Pushslocal(0);
         cu.Pushlarg(1);
-        cu.Pushsloc(1);
-        cu.Pushlloc(0);
-        cu.Pushlloc(1);
+        cu.Pushslocal(1);
+        cu.Pushllocal(0);
+        cu.Pushllocal(1);
         cu.Push(add_s32);
         cu.Push(ret);
         cu.PushFunction(2, 0, 4, 4, 4);
@@ -77,7 +77,7 @@ public static class Program {
         cu.PushMain(0);
         cu.Push(push_s32, 10);
         cu.Push(push_s32, 5);
-        cu.PushCall(44);
+        cu.PushCall(48);
         cu.Push(ret);
 
         if (File.Exists($"{directory}/Test.cu")) {
@@ -98,6 +98,8 @@ public static class Program {
         }
 
         Print(r.ToString());
+
+        Print($"StackLeft: {SLVM.StackCurrent}");
     }
 
     private static void Print(string str) {
