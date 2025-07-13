@@ -2,12 +2,16 @@ using System.Text;
 using System.Collections.Generic;
 
 public enum AstType {
-    None          = 0,
-    Ident         = 1,
-    Statement     = 2,
-    Expression    = 3,
-    Literal       = 4,
-    Operator      = 5,
+    None           = 0,
+    Ident          = 1,
+    Statement      = 2,
+    Expression     = 3,
+    StringLiteral  = 4,
+    CharLiteral    = 5,
+    IntLiteral     = 6,
+    FloatLiteral   = 7,
+    DoubleLiteral  = 8,
+    Operator       = 9,
 }
 
 public enum StatementType {
@@ -22,6 +26,7 @@ public enum StatementType {
 public class AstNode {
     public AstType       Type;
     public string        String;
+    public Value         Number;
     public TokenType     OperatorType;
     public StatementType StmtType;
     public bool          IsBinary;
@@ -44,7 +49,29 @@ public class AstNode {
                 sb.Append(String);
                 sb.Append('\n');
             } break;
-            case AstType.Literal : {
+            case AstType.IntLiteral : {
+                sb.Append(' ', indent * spaces);
+                sb.Append(TypeInfo.Name);
+                sb.Append(" : ");
+                sb.Append(Number.IntValue);
+                sb.Append('\n');
+            } break;
+            case AstType.FloatLiteral : {
+                sb.Append(' ', indent * spaces);
+                sb.Append(TypeInfo.Name);
+                sb.Append(" : ");
+                sb.Append(Number.FloatValue);
+                sb.Append('\n');
+            } break;
+            case AstType.DoubleLiteral : {
+                sb.Append(' ', indent * spaces);
+                sb.Append(TypeInfo.Name);
+                sb.Append(" : ");
+                sb.Append(Number.DoubleValue);
+                sb.Append('\n');
+            } break;
+            case AstType.CharLiteral :
+            case AstType.StringLiteral : {
                 sb.Append(' ', indent * spaces);
                 sb.Append(TypeInfo.Name);
                 sb.Append(" : ");

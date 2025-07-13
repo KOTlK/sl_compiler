@@ -15,32 +15,33 @@ public class Ast {
 }
 
 public static class AstParser {
-    public static Ast Parse(Tokenizer tokenizer, ErrorStream err) {
+    public static Ast Parse(Lexer lexer, ErrorStream err) {
         TypeSystem.Init();
         var root = new Ast();
 
-        while (tokenizer.GetCurrent().Type != EndOfFile) {
-            var currentToken = tokenizer.GetCurrent();
+        while (lexer.GetCurrent().Type != EndOfFile) {
+            var currentToken = lexer.GetCurrent();
             switch (currentToken.Type) {
                 case TokenType.Equals :
-                    root.Add(ParseAssignment(tokenizer, err));
+                    root.Add(ParseAssignment(lexer, err));
                     break;
                 case TokenType.Return :
-                    root.Add(ParseReturn(tokenizer, err));
+                    root.Add(ParseReturn(lexer, err));
                     break;
                 case TokenType.Struct :
-                    root.Typedefs.Add(ParseTypedef(tokenizer, err));
+                    root.Typedefs.Add(ParseTypedef(lexer, err));
                     break;
                 case TokenType.Ident : {
-                    var next  = tokenizer.Peek();
-                    var next2 = tokenizer.Peek(2);
+                    var next  = lexer.Peek();
 
-                    if (next.Type == Colon && next2.Type == Colon) {
-                        root.Functions.Add(ParseFundef(tokenizer, err));
+                    if (next.Type == DoubleColon) {
+                        root.Functions.Add(ParseFundef(lexer, err));
+                    } else {
+                        currentToken = lexer.EatToken();
                     }
                 } break;
                 default :
-                    currentToken = tokenizer.EatToken();
+                    currentToken = lexer.EatToken();
                     break;
             }
         }
@@ -82,15 +83,15 @@ public static class AstParser {
     // }
 
 
-    private static AstNode ParseAssignment(Tokenizer tokenizer, ErrorStream err) {
-        var prev  = tokenizer.Previous();
-        // var next  = tokenizer.Peek();
-        var ident = prev.Type == TokenType.Ident ? prev : tokenizer.Previous(2);
+    private static AstNode ParseAssignment(Lexer lexer, ErrorStream err) {
+        var prev  = lexer.Previous();
+        // var next  = lexer.Peek();
+        var ident = prev.Type == TokenType.Ident ? prev : lexer.Previous(2);
 
         // ident = expr; == assign
-        tokenizer.EatToken();
+        lexer.EatToken();
         var assign = MakeAssign(MakeIdent(ident.StringValue),
-                                ParseExpression(tokenizer, err, -9999));
+                                ParseExpression(lexer, err, -9999));
 
         if(prev.Type == Colon) {
             // @Incomplete suggest type of the expression;
@@ -103,40 +104,42 @@ public static class AstParser {
         return assign;
     }
 
-    private static AstNode ParseReturn(Tokenizer tokenizer, ErrorStream err) {
+    private static AstNode ParseReturn(Lexer lexer, ErrorStream err) {
         var node      = new AstNode();
         node.Type     = Statement;
         node.StmtType = StatementType.Return;
 
-        var token = tokenizer.EatToken();
+        var token = lexer.EatToken();
 
         if (token.Type == Semicolon) {
-            tokenizer.EatToken();
+            lexer.EatToken();
             return node;
         }
 
-        node.Expression = ParseExpression(tokenizer, err, -9999);
-        tokenizer.EatToken();
+        node.Expression = ParseExpression(lexer, err, -9999);
+        lexer.EatToken();
 
-        if (AssertSymbol(tokenizer.GetCurrent(), Semicolon, err)) return null;
+        if (AssertSymbol(lexer.GetCurrent(), Semicolon, err)) return null;
 
         return node;
     }
 
-    public static AstNode ParseExpression(Tokenizer tokenizer, ErrorStream err, int prec) {
-        var token = tokenizer.GetCurrent();
+    public static AstNode ParseExpression(Lexer lexer, ErrorStream err, int prec) {
+        var token = lexer.GetCurrent();
         AstNode left = null;
 
         switch(token.Type) {
             case TokenType.Ident : {
-                if (tokenizer.Peek().Type == ORParen) {
-                    left = ParseFuncall(tokenizer, err);
+                if (lexer.Peek().Type == ORParen) {
+                    left = ParseFuncall(lexer, err);
                 } else {
                     left = MakeIdent(token.StringValue);
                 }
             } break;
-            case TokenType.Literal : {
-                left = MakeLiteral(token);
+            case TokenType.FloatLiteral  :
+            case TokenType.DoubleLiteral :
+            case TokenType.IntLiteral : {
+                left = MakeNumericLiteral(token);
             } break;
             case TokenType.StringLiteral : {
                 left = MakeLiteral(token, TypeSystem.String);
@@ -145,25 +148,27 @@ public static class AstParser {
                 left = MakeLiteral(token, TypeSystem.Char);
             } break;
             case TokenType.ORParen : {
-                tokenizer.EatToken();
-                left = ParseExpression(tokenizer, err, -9999);
-                tokenizer.EatToken();
+                lexer.EatToken();
+                left = ParseExpression(lexer, err, -9999);
+                lexer.EatToken();
             } break;
             case TokenType.Minus : {
-                if(IsBinary(tokenizer) == false) {
+                if(IsBinary(lexer) == false) {
                     var node          = new AstNode();
                     node.Type         = Operator;
                     node.OperatorType = TokenType.Minus;
                     node.IsBinary     = false;
-                    var next = tokenizer.EatToken();
-                    if (next.Type == TokenType.Literal) {
-                        node.Right = MakeLiteral(next);
+                    var next = lexer.EatToken();
+                    if (next.Type == TokenType.IntLiteral ||
+                        next.Type == TokenType.FloatLiteral ||
+                        next.Type == TokenType.DoubleLiteral) {
+                        node.Right = MakeNumericLiteral(next);
                     } else if (next.Type == TokenType.StringLiteral) {
                         node.Right = MakeLiteral(next, TypeSystem.String);
                     } else if (next.Type == TokenType.CharLiteral) {
                         node.Right = MakeLiteral(next, TypeSystem.Char);
                     } else {
-                        node.Right = ParseExpression(tokenizer, err, prec);
+                        node.Right = ParseExpression(lexer, err, prec);
                     }
                     left = node;
                 }
@@ -171,16 +176,16 @@ public static class AstParser {
         }
 
         while(true) {
-            token         = tokenizer.EatToken();
+            token         = lexer.EatToken();
             var tokenPrec = GetPrecedence(token.Type);
 
             if(IsOperator(token) == false) {
-                tokenizer.Current--;
+                lexer.TokensPtr--;
                 break;
             }
 
             if(tokenPrec < prec) {
-                tokenizer.Current--;
+                lexer.TokensPtr--;
                 break;
             }
 
@@ -189,8 +194,8 @@ public static class AstParser {
             node.OperatorType = token.Type;
             node.IsBinary     = true;
             node.Left         = left;
-            tokenizer.EatToken();
-            node.Right        = ParseExpression(tokenizer, err, tokenPrec + 1);
+            lexer.EatToken();
+            node.Right        = ParseExpression(lexer, err, tokenPrec + 1);
 
             left = node;
         }
@@ -198,9 +203,9 @@ public static class AstParser {
         return left;
     }
 
-    private static AstNode ParseTypedef(Tokenizer tokenizer, ErrorStream err) {
-        var name      = tokenizer.EatToken();
-        var next      = tokenizer.EatToken();
+    private static AstNode ParseTypedef(Lexer lexer, ErrorStream err) {
+        var name      = lexer.EatToken();
+        var next      = lexer.EatToken();
         var node      = new AstNode();
         var type      = new TypeInfo();
         node.Type     = Statement;
@@ -218,7 +223,7 @@ public static class AstParser {
         uint size  = 0;
 
         while (next.Type != EndOfFile) {
-            next          = tokenizer.EatToken();
+            next          = lexer.EatToken();
             if (next.Type == CParen) break;
 
             if (next.Type != TokenType.Ident) {
@@ -226,21 +231,21 @@ public static class AstParser {
                 return null;
             }
 
-            var colon     = tokenizer.EatToken();
+            var colon     = lexer.EatToken();
 
             if (colon.Type != Colon) {
                 err.UnexpectedSymbol(colon.Line, colon.Column, Colon, colon.Type);
                 return null;
             }
 
-            var fieldType = tokenizer.EatToken();
+            var fieldType = lexer.EatToken();
 
             if (fieldType.Type != TokenType.Ident) {
                 err.UnexpectedSymbol(fieldType.Line, fieldType.Column, TokenType.Ident, fieldType.Type);
                 return null;
             }
 
-            var semicolon = tokenizer.EatToken();
+            var semicolon = lexer.EatToken();
 
             if (semicolon.Type != Semicolon) {
                 err.UnexpectedSymbol(semicolon.Line, semicolon.Column, Semicolon, semicolon.Type);
@@ -279,33 +284,30 @@ public static class AstParser {
         return node;
     }
 
-    private static AstNode ParseFundef(Tokenizer tokenizer, ErrorStream err) {
+    private static AstNode ParseFundef(Lexer lexer, ErrorStream err) {
         var node      = new AstNode();
         node.Type     = Statement;
         node.StmtType = Fundef;
-        var name      = tokenizer.GetCurrent();
+        var name      = lexer.GetCurrent();
         node.Ident    = MakeIdent(name.StringValue);
 
-        var c1        = tokenizer.EatToken();
-        if (AssertSymbol(c1, Colon, err)) return null;
+        var c1        = lexer.EatToken();
+        if (AssertSymbol(c1, DoubleColon, err)) return null;
 
-        var c2 = tokenizer.EatToken();
-        if (AssertSymbol(c2, Colon, err)) return null;
-
-        var next = tokenizer.EatToken();
+        var next = lexer.EatToken();
         if (AssertSymbol(next, ORParen, err)) return null;
 
-        if (tokenizer.Peek().Type != CRParen) {
+        if (lexer.Peek().Type != CRParen) {
             node.Args = new List<AstNode>();
             // parse arguments
             while (next.Type != EndOfFile) {
-                next = tokenizer.EatToken(); // next is ident
+                next = lexer.EatToken(); // next is ident
 
-                if (next.Type == Comma) next = tokenizer.EatToken();
+                if (next.Type == Comma) next = lexer.EatToken();
                 if (next.Type == CRParen) break;
                 if (AssertSymbol(next, TokenType.Ident, err)) return null;
 
-                var colon = tokenizer.EatToken();
+                var colon = lexer.EatToken();
                 if (AssertSymbol(colon, Colon, err)) return null;
 
                 var ident       = MakeIdent(next.StringValue);
@@ -313,15 +315,19 @@ public static class AstParser {
                 TypeInfo type   = null;
 
                 // @Incomplete suggest type of argument
-                if (tokenizer.Peek().Type == TokenType.Equals) {
-                    tokenizer.EatToken();
-                    tokenizer.EatToken();
-                    assign = MakeAssign(ident, ParseExpression(tokenizer, err, -9999));
-                    if (assign.Expression.Type == AstType.Literal) {
+                if (lexer.Peek().Type == TokenType.Equals) {
+                    lexer.EatToken();
+                    lexer.EatToken();
+                    assign = MakeAssign(ident, ParseExpression(lexer, err, -9999));
+                    if (assign.Expression.Type == AstType.IntLiteral ||
+                        assign.Expression.Type == AstType.FloatLiteral ||
+                        assign.Expression.Type == AstType.DoubleLiteral ||
+                        assign.Expression.Type == AstType.StringLiteral ||
+                        assign.Expression.Type == AstType.CharLiteral) {
                         type = assign.Expression.TypeInfo;
                     }
                 } else {
-                    var t = tokenizer.EatToken();
+                    var t = lexer.EatToken();
                     type  = TypeSystem.GetType(t.StringValue);
                 }
 
@@ -330,56 +336,53 @@ public static class AstParser {
                 node.Args.Add(vardecl);
             }
         } else {
-            tokenizer.EatToken();
+            lexer.EatToken();
         }
 
-        var cur = tokenizer.GetCurrent();
+        var cur = lexer.GetCurrent();
         if (AssertSymbol(cur, CRParen, err)) return null;
 
-        var min = tokenizer.EatToken();
+        var arrow = lexer.EatToken();
 
-        if (min.Type == OParen) {
+        if (arrow.Type == OParen) {
             node.TypeInfo = TypeSystem.Void;
         } else {
-            if (AssertSymbol(min, Minus, err)) return null;
+            if (AssertSymbol(arrow, ArrowRight, err)) return null;
 
-            var more = tokenizer.EatToken();
-            if (AssertSymbol(more, MoreThan, err)) return null;
-
-            var tp = tokenizer.EatToken();
+            var tp = lexer.EatToken();
             if (AssertSymbol(tp, TokenType.Ident, err)) return null;
 
             node.TypeInfo = TypeSystem.GetType(tp.StringValue);
-            tokenizer.EatToken();
+            lexer.EatToken();
         }
 
-        node.Body = ParseBody(tokenizer, err);
+        node.Body = ParseBody(lexer, err);
 
         return node;
     }
 
-    private static List<AstNode> ParseBody(Tokenizer tokenizer, ErrorStream err) {
+    private static List<AstNode> ParseBody(Lexer lexer, ErrorStream err) {
         var nodes = new List<AstNode>();
 
-        if (AssertSymbol(tokenizer.GetCurrent(), OParen, err)) return null;
+        if (AssertSymbol(lexer.GetCurrent(), OParen, err)) return null;
 
-        while (tokenizer.GetCurrent().Type != EndOfFile) {
-            var currentToken = tokenizer.EatToken();
+        while (lexer.GetCurrent().Type != EndOfFile) {
+            var currentToken = lexer.EatToken();
 
             switch (currentToken.Type) {
                 case CParen : return nodes;
                 case TokenType.Equals :
-                    nodes.Add(ParseAssignment(tokenizer, err));
+                    nodes.Add(ParseAssignment(lexer, err));
                     break;
                 case TokenType.Return : {
-                    nodes.Add(ParseReturn(tokenizer, err));
+                    nodes.Add(ParseReturn(lexer, err));
                 } break;
                 case TokenType.Ident : {
-                    var next = tokenizer.Peek();
+                    var next = lexer.Peek();
 
                     if (next.Type == ORParen) {
-                        nodes.Add(ParseFuncall(tokenizer, err));
-                        var semicolon = tokenizer.EatToken();
+                        nodes.Add(ParseFuncall(lexer, err));
+                        var semicolon = lexer.EatToken();
 
                         if (AssertSymbol(semicolon, Semicolon, err)) return null;
                     }
@@ -389,25 +392,25 @@ public static class AstParser {
             }
         }
 
-        if (AssertSymbol(tokenizer.GetCurrent(), CParen, err)) return null;
+        if (AssertSymbol(lexer.GetCurrent(), CParen, err)) return null;
 
         return nodes;
     }
 
-    private static AstNode ParseFuncall(Tokenizer tokenizer, ErrorStream err) {
-        var name      = tokenizer.GetCurrent();
+    private static AstNode ParseFuncall(Lexer lexer, ErrorStream err) {
+        var name      = lexer.GetCurrent();
         var node      = new AstNode();
         node.Type     = Statement;
         node.StmtType = Funcall;
         node.Ident    = MakeIdent(name.StringValue);
 
-        tokenizer.EatToken(); // ORParen 100% here
-        var cparen = tokenizer.EatToken();
+        lexer.EatToken(); // ORParen 100% here
+        var cparen = lexer.EatToken();
 
         if (cparen.Type == CRParen) {
-            tokenizer.EatToken();
+            lexer.EatToken();
 
-            var semicolon = tokenizer.EatToken();
+            var semicolon = lexer.EatToken();
             if (AssertSymbol(semicolon, Semicolon, err)) return null;
 
             return node;
@@ -415,19 +418,19 @@ public static class AstParser {
 
         node.Args = new List<AstNode>();
 
-        while (tokenizer.GetCurrent().Type != EndOfFile) {
-            var arg  = ParseExpression(tokenizer, err, -9999);
-            var next = tokenizer.EatToken();
+        while (lexer.GetCurrent().Type != EndOfFile) {
+            var arg  = ParseExpression(lexer, err, -9999);
+            var next = lexer.EatToken();
 
             node.Args.Add(arg);
 
             if (next.Type == CRParen) break;
             if (AssertSymbol(next, Comma, err)) return null;
 
-            tokenizer.EatToken();
+            lexer.EatToken();
         }
 
-        cparen = tokenizer.GetCurrent();
+        cparen = lexer.GetCurrent();
         if (AssertSymbol(cparen, CRParen, err)) return null;
 
         return node;
@@ -443,13 +446,37 @@ public static class AstParser {
 
     private static AstNode MakeLiteral(Token token, TypeInfo type = null) {
         var node    = new AstNode();
-        node.Type   = AstType.Literal;
+        node.Type   = AstType.StringLiteral;
         node.String = token.StringValue;
 
         if(type == null) {
             node.TypeInfo = GuessLiteralType(token.StringValue);
         } else {
             node.TypeInfo = type;
+        }
+
+        return node;
+    }
+
+    private static AstNode MakeNumericLiteral(Token token) {
+        var node    = new AstNode();
+
+        switch(token.Type) {
+            case TokenType.IntLiteral :
+                node.Type = AstType.IntLiteral;
+                node.Number.IntValue = token.LiteralValue.IntValue;
+                node.TypeInfo        = GuessIntType(token.LiteralValue.IntValue);
+                break;
+            case TokenType.FloatLiteral :
+                node.Type = AstType.FloatLiteral;
+                node.Number.FloatValue = token.LiteralValue.FloatValue;
+                node.TypeInfo          = TypeSystem.Float;
+                break;
+            case TokenType.DoubleLiteral :
+                node.Type = AstType.DoubleLiteral;
+                node.Number.DoubleValue = token.LiteralValue.DoubleValue;
+                node.TypeInfo           = TypeSystem.Double;
+                break;
         }
 
         return node;
@@ -476,14 +503,14 @@ public static class AstParser {
         return assign;
     }
 
-    private static bool IsBinary(Tokenizer tokenizer) {
-        var cur  = tokenizer.GetCurrent();
+    private static bool IsBinary(Lexer lexer) {
+        var cur  = lexer.GetCurrent();
 
         switch(cur.Type) {
             case Plus    : return true;
             case Minus   : {
-                if(tokenizer.Current == 0) return false;
-                var prev = tokenizer.Previous();
+                if(lexer.TokensPtr == 0) return false;
+                var prev = lexer.Previous();
                 if(IsOperator(prev) ||
                    prev.Type == TokenType.Equals ||
                    prev.Type == ORParen) {
@@ -523,6 +550,18 @@ public static class AstParser {
             case Exp   : return 30;
             default    : return 0;
         }
+    }
+
+    private static TypeInfo GuessIntType(ulong num) {
+        if (num < 128)                 return TypeSystem.s8;
+        if (num < 256)                 return TypeSystem.u8;
+        if (num < 32768)               return TypeSystem.s16;
+        if (num < 65536)               return TypeSystem.u16;
+        if (num < 2147483648)          return TypeSystem.s32;
+        if (num < 4294967296)          return TypeSystem.u32;
+        if (num < 9223372036854775808) return TypeSystem.s64;
+
+        return TypeSystem.u64;
     }
 
     private static TypeInfo GuessLiteralType(string value) {

@@ -567,11 +567,6 @@ public static unsafe class SLVM {
 
         var start = fp + argsCount * 2 + localsCount * 2 + offset;
 
-        var i = Stack[start]           |
-                Stack[start + 1] << 8  |
-                Stack[start + 2] << 16 |
-                Stack[start + 3] << 24;
-
         StackSet(StackCurrent - size, start, size);
         StackCurrent -= size;
     }
@@ -614,11 +609,6 @@ public static unsafe class SLVM {
         }
 
         var start = (fp + argsCount * 2 + localsCount * 2) + offset;
-
-        var i = Stack[start]           |
-                Stack[start + 1] << 8  |
-                Stack[start + 2] << 16 |
-                Stack[start + 3] << 24;
 
         StackPush(start, size);
     }
