@@ -130,6 +130,10 @@ public static unsafe class SLVM {
                 case push_s32 : {
                     StackPush(Reads32(bytes, ref pc));
                 } break;
+                case push_size : {
+                    var cnt = Readu32(bytes, ref pc);
+                    StackPushZeros(cnt);
+                } break;
                 case pop_s32 : {
                     StackPops32();
                     break;
@@ -689,6 +693,12 @@ public static unsafe class SLVM {
                     sb.Append(opcode.ToString());
                 } break;
                 case push_s32 : {
+                    sb.Append(opcode.ToString());
+                    sb.Append(' ');
+                    var val = Reads32(bytes, ref pc);
+                    sb.Append(val.ToString());
+                } break;
+                case push_size : {
                     sb.Append(opcode.ToString());
                     sb.Append(' ');
                     var val = Reads32(bytes, ref pc);

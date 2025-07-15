@@ -1,22 +1,23 @@
 public enum Opcode : ushort {
     // push 32 bit integer
     push_s32  = 0,
+    push_size = 8,
     // pop 32 bit integer
-    pop_s32   = 1,
+    pop_s32   = 9,
     // pop 2 32 bit integers, add them, push value
-    add_s32   = 2,
+    add_s32   = 10,
     // pop 2 32 bit integers, sub them, push value
-    sub_s32   = 3,
+    sub_s32   = 11,
     // function declaration
-    func      = 4,
+    func      = 12,
     // function call
-    call      = 5,
+    call      = 13,
     // return
-    ret       = 6,
+    ret       = 14,
     // push argument at specified index on stack
-    larg      = 7,
+    larg      = 15,
     // push local variable at specified index on stack
-    llocal    = 8,
+    llocal    = 16,
     // pop from stack and set this value to local variable at specified index
-    slocal    = 9,
+    slocal    = 17,
 }

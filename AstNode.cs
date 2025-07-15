@@ -2,25 +2,21 @@ using System.Text;
 using System.Collections.Generic;
 
 public enum AstType {
-    None           = 0,
-    Ident          = 1,
-    Statement      = 2,
-    Expression     = 3,
-    StringLiteral  = 4,
-    CharLiteral    = 5,
-    IntLiteral     = 6,
-    FloatLiteral   = 7,
-    DoubleLiteral  = 8,
-    Operator       = 9,
-}
-
-public enum StatementType {
-    VarDecl  = 0,
-    Assign   = 1,
-    Return   = 2,
-    Typedef  = 3,
-    Fundef   = 4,
-    Funcall  = 5,
+    None             = 0,
+    Ident            = 1,
+    StatementVarDecl = 3,
+    StatementAssign  = 4,
+    StatementReturn  = 5,
+    StatementTypedef = 6,
+    StatementFundef  = 7,
+    StatementFuncall = 8,
+    Expression       = 9,
+    StringLiteral    = 10,
+    CharLiteral      = 11,
+    IntLiteral       = 12,
+    FloatLiteral     = 13,
+    DoubleLiteral    = 14,
+    Operator         = 15,
 }
 
 public class AstNode {
@@ -28,7 +24,6 @@ public class AstNode {
     public string        String;
     public Value         Number;
     public TokenType     OperatorType;
-    public StatementType StmtType;
     public bool          IsBinary;
     public AstNode       Ident;
     public AstNode       Literal;
@@ -96,81 +91,114 @@ public class AstNode {
                 }
                 sb.Append('\n');
             } break;
-            case AstType.Statement : {
+            case AstType.StatementVarDecl : {
                 sb.Append(' ', indent * spaces);
-                sb.Append($"{StmtType}: ");
+                sb.Append("VarDecl: ");
                 sb.Append('\n');
                 indent++;
-                if(StmtType == StatementType.VarDecl) {
-                    if (TypeInfo == null) {
-                        Ident.Draw(sb, ref indent);
-                    } else {
-                        sb.Append(' ', indent * spaces);
-                        sb.Append($"{Ident.String}: {TypeInfo.Name}");
-                    }
-                    if (Stmt != null) {
-                        Stmt.Draw(sb, ref indent);
-                    }
-                } else if (StmtType == StatementType.Assign) {
+                if (TypeInfo == null) {
                     Ident.Draw(sb, ref indent);
-                    if (Literal != null) {
-                        Literal.Draw(sb, ref indent);
-                    } else if (Expression != null) {
-                        Expression.Draw(sb, ref indent);
-                    }
-                } else if (StmtType == StatementType.Return) {
+                } else {
+                    sb.Append(' ', indent * spaces);
+                    sb.Append($"{Ident.String}: {TypeInfo.Name}");
+                }
+                if (Stmt != null) {
+                    Stmt.Draw(sb, ref indent);
+                }
+                indent--;
+                sb.Append('\n');
+            } break;
+            case AstType.StatementAssign : {
+                sb.Append(' ', indent * spaces);
+                sb.Append("Assign: ");
+                sb.Append('\n');
+                indent++;
+                Ident.Draw(sb, ref indent);
+                if (Literal != null) {
+                    Literal.Draw(sb, ref indent);
+                } else if (Expression != null) {
                     Expression.Draw(sb, ref indent);
-                } else if (StmtType == StatementType.Typedef) {
-                    sb.Append(TypeInfo.Name);
-                    sb.Append(":\n");
+                }
+                indent--;
+                sb.Append('\n');
+            } break;
+            case AstType.StatementReturn : {
+                sb.Append(' ', indent * spaces);
+                sb.Append("Return: ");
+                sb.Append('\n');
+                indent++;
+                Expression.Draw(sb, ref indent);
+                indent--;
+                sb.Append('\n');
+            } break;
+            case AstType.StatementTypedef : {
+                sb.Append(' ', indent * spaces);
+                sb.Append("Typedef: ");
+                sb.Append('\n');
+                indent++;
+                sb.Append(TypeInfo.Name);
+                sb.Append(":\n");
+                indent++;
+                foreach(var field in TypeInfo.Fields) {
+                    sb.Append(' ', spaces * indent);
+                    sb.Append($"{field.Name} : {field.Type.Name}\n");
+                }
+                sb.Append(' ', spaces * indent);
+                sb.Append($"Align: {TypeInfo.Align}\n");
+                sb.Append(' ', spaces * indent);
+                sb.Append($"Size:  {TypeInfo.Size}\n");
+                indent--;
+                indent--;
+                sb.Append('\n');
+            } break;
+            case AstType.StatementFundef : {
+                sb.Append(' ', indent * spaces);
+                sb.Append("Fundef: ");
+                sb.Append('\n');
+                indent++;
+                Ident.Draw(sb, ref indent);
+                if (TypeInfo != null) {
+                    sb.Append(' ', spaces * indent);
+                    sb.Append($"Return type: {TypeInfo.Name}\n");
+                }
+                sb.Append(' ', spaces * indent);
+                sb.Append("Args:\n");
+                indent++;
+                if (Args != null) {
+                    foreach(var arg in Args) {
+                        arg.Draw(sb, ref indent);
+                    }
+                }
+                indent--;
+                sb.Append(' ', spaces * indent);
+                sb.Append("Body:\n");
+                indent++;
+                foreach(var node in Body) {
+                    node.Draw(sb, ref indent);
+                }
+                indent--;
+                indent--;
+                sb.Append('\n');
+            } break;
+            case AstType.StatementFuncall : {
+                sb.Append(' ', indent * spaces);
+                sb.Append("Call: ");
+                sb.Append('\n');
+                indent++;
+                Ident.Draw(sb, ref indent);
+                sb.Append(' ', spaces * indent);
+                sb.Append("Args:\n");
+                if (Args != null) {
                     indent++;
-                    foreach(var field in TypeInfo.Fields) {
-                        sb.Append(' ', spaces * indent);
-                        sb.Append($"{field.Name} : {field.Type.Name}\n");
-                    }
-                    sb.Append(' ', spaces * indent);
-                    sb.Append($"Align: {TypeInfo.Align}\n");
-                    sb.Append(' ', spaces * indent);
-                    sb.Append($"Size:  {TypeInfo.Size}\n");
-                    indent--;
-                } else if (StmtType == StatementType.Fundef) {
-                    Ident.Draw(sb, ref indent);
-                    if (TypeInfo != null) {
-                        sb.Append(' ', spaces * indent);
-                        sb.Append($"Return type: {TypeInfo.Name}\n");
-                    }
-                    sb.Append(' ', spaces * indent);
-                    sb.Append("Args:\n");
-                    indent++;
-                    if (Args != null) {
-                        foreach(var arg in Args) {
-                            arg.Draw(sb, ref indent);
-                        }
+                    foreach(var arg in Args) {
+                        arg.Draw(sb, ref indent);
                     }
                     indent--;
-                    sb.Append(' ', spaces * indent);
-                    sb.Append("Body:\n");
-                    indent++;
-                    foreach(var node in Body) {
-                        node.Draw(sb, ref indent);
-                    }
-                    indent--;
-                } else if (StmtType == StatementType.Funcall) {
-                    Ident.Draw(sb, ref indent);
-                    sb.Append(' ', spaces * indent);
-                    sb.Append("Args:\n");
-                    if (Args != null) {
-                        indent++;
-                        foreach(var arg in Args) {
-                            arg.Draw(sb, ref indent);
-                        }
-                        indent--;
-                    }
+                }
 
-                    if (TypeInfo != null) {
-                        sb.Append(' ', spaces * indent);
-                        sb.Append($"Return type: {TypeInfo.Name}");
-                    }
+                if (TypeInfo != null) {
+                    sb.Append(' ', spaces * indent);
+                    sb.Append($"Return type: {TypeInfo.Name}");
                 }
                 indent--;
                 sb.Append('\n');

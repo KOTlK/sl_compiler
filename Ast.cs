@@ -2,7 +2,6 @@ using System.Collections.Generic;
 
 using static AstType;
 using static TokenType;
-using static StatementType;
 
 public class Ast {
     public List<AstNode> Typedefs  = new List<AstNode>();
@@ -106,8 +105,7 @@ public static class AstParser {
 
     private static AstNode ParseReturn(Lexer lexer, ErrorStream err) {
         var node      = new AstNode();
-        node.Type     = Statement;
-        node.StmtType = StatementType.Return;
+        node.Type     = StatementReturn;
 
         var token = lexer.EatToken();
 
@@ -208,8 +206,7 @@ public static class AstParser {
         var next      = lexer.EatToken();
         var node      = new AstNode();
         var type      = new TypeInfo();
-        node.Type     = Statement;
-        node.StmtType = Typedef;
+        node.Type     = StatementTypedef;
         node.TypeInfo = type;
         type.Name     = name.StringValue;
         type.Fields   = new List<FieldInfo>();
@@ -286,8 +283,7 @@ public static class AstParser {
 
     private static AstNode ParseFundef(Lexer lexer, ErrorStream err) {
         var node      = new AstNode();
-        node.Type     = Statement;
-        node.StmtType = Fundef;
+        node.Type     = StatementFundef;
         var name      = lexer.GetCurrent();
         node.Ident    = MakeIdent(name.StringValue);
 
@@ -400,8 +396,7 @@ public static class AstParser {
     private static AstNode ParseFuncall(Lexer lexer, ErrorStream err) {
         var name      = lexer.GetCurrent();
         var node      = new AstNode();
-        node.Type     = Statement;
-        node.StmtType = Funcall;
+        node.Type     = StatementFuncall;
         node.Ident    = MakeIdent(name.StringValue);
 
         lexer.EatToken(); // ORParen 100% here
@@ -484,8 +479,7 @@ public static class AstParser {
 
     private static AstNode MakeVar(AstNode ident, TypeInfo type, AstNode assign = null) {
         var vardecl      = new AstNode();
-        vardecl.Type     = Statement;
-        vardecl.StmtType = VarDecl;
+        vardecl.Type     = StatementVarDecl;
         vardecl.Ident    = ident;
         vardecl.TypeInfo = type;
         vardecl.Stmt     = assign;
@@ -495,8 +489,7 @@ public static class AstParser {
 
     private static AstNode MakeAssign(AstNode ident, AstNode expr) {
         var assign        = new AstNode();
-        assign.Type       = Statement;
-        assign.StmtType   = Assign;
+        assign.Type       = StatementAssign;
         assign.Ident      = ident;
         assign.Expression = expr;
 
