@@ -2,15 +2,20 @@ using System;
 using System.Collections.Generic;
 
 using static Opcode;
+using static BytecodeConstants;
 
+/*  Structure:
+    Keyword 4B
+    Functions Count 4B
+    Function Table [index(4B) : position(4B)]
+    Code...
+*/
 public unsafe class CodeUnit {
     public byte[]    Bytes;
-    public List<int> Functions = new List<int>();
-    public int       Count;
-    public int       Length;
-    public int       MainPos = 4;
+    public uint      Count;
+    public uint      Length;
 
-    public CodeUnit(int length) {
+    public CodeUnit(uint length) {
         Bytes    = new byte[length];
         Length   = length;
         Bytes[0] = 0x80;
@@ -18,7 +23,6 @@ public unsafe class CodeUnit {
         Bytes[2] = 0x00;
         Bytes[3] = 0x8A;
         Count    = 4;
-        Push(0);
     }
 
     public void Push(Opcode a) {
@@ -60,8 +64,9 @@ public unsafe class CodeUnit {
         Push(index);
     }
 
-    public int PushFunction(byte argCount, byte localsCount, uint retSize, List<ushort> argsAndLocals) {
+    public uint PushFunction(byte argCount, byte localsCount, uint retSize, List<ushort> argsAndLocals) {
         Push(func);
+        var p = Count;
         Push(argCount);
         Push(localsCount);
         Push(retSize);
@@ -76,13 +81,12 @@ public unsafe class CodeUnit {
             offset += argsAndLocals[argCount + i];
             Push(offset);
         }
-        var p = Count;
-        Functions.Add(p);
         return p;
     }
 
-    public int PushFunction(byte argCount, byte localsCount, uint retSize, params ushort[] argsAndLocals) {
+    public uint PushFunction(byte argCount, byte localsCount, uint retSize, params ushort[] argsAndLocals) {
         Push(func);
+        var p = Count;
         Push(argCount);
         Push(localsCount);
         Push(retSize);
@@ -97,8 +101,6 @@ public unsafe class CodeUnit {
             offset += argsAndLocals[argCount + i];
             Push(offset);
         }
-        var p = Count;
-        Functions.Add(p);
         return p;
     }
 
@@ -259,7 +261,32 @@ public unsafe class CodeUnit {
         Bytes[Count++] = (byte)b;
     }
 
-    public void Resize(int newSize) {
-        Array.Resize(ref Bytes, newSize);
+    private uint Readu32(uint ptr) {
+        var i = (uint)(Bytes[ptr]           |
+                       Bytes[ptr + 1] << 8  |
+                       Bytes[ptr + 2] << 16 |
+                       Bytes[ptr + 3] << 24);
+
+        return i;
+    }
+
+    public void SetFunctionPos(uint index, uint pos) {
+        var offset = FunctionsOffset + 8 * index + 4;
+
+        Bytes[offset]     = (byte)( pos        & 0xFF);
+        Bytes[offset + 1] = (byte)((pos >> 8)  & 0xFF);
+        Bytes[offset + 2] = (byte)((pos >> 16) & 0xFF);
+        Bytes[offset + 3] = (byte)((pos >> 24) & 0xFF);
+    }
+
+    public void Resize(uint newSize) {
+        var arr = new byte[newSize];
+
+        for (var i = 0; i < Length; ++i) {
+            arr[i] = Bytes[i];
+        }
+
+        Bytes  = arr;
+        Length = newSize;
     }
 }

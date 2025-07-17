@@ -4,7 +4,7 @@ using System.Collections.Generic;
 public enum AstType {
     None             = 0,
     Ident            = 1,
-    StatementVarDecl = 3,
+    StatementVardecl = 3,
     StatementAssign  = 4,
     StatementReturn  = 5,
     StatementTypedef = 6,
@@ -91,7 +91,7 @@ public class AstNode {
                 }
                 sb.Append('\n');
             } break;
-            case AstType.StatementVarDecl : {
+            case AstType.StatementVardecl : {
                 sb.Append(' ', indent * spaces);
                 sb.Append("VarDecl: ");
                 sb.Append('\n');

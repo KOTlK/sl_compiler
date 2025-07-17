@@ -479,7 +479,7 @@ public static class AstParser {
 
     private static AstNode MakeVar(AstNode ident, TypeInfo type, AstNode assign = null) {
         var vardecl      = new AstNode();
-        vardecl.Type     = StatementVarDecl;
+        vardecl.Type     = StatementVardecl;
         vardecl.Ident    = ident;
         vardecl.TypeInfo = type;
         vardecl.Stmt     = assign;

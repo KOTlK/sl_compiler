@@ -29,7 +29,7 @@ struct int3 {
 }
 
 main :: () -> s32 {
-    hello := -2.0;
+    hello := 2;
     world := 10;
 
     total := add(hello, world) + 15 / 2;

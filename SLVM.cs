@@ -3,7 +3,8 @@ using System.Text;
 using System.Collections.Generic;
 
 using static Opcode;
-
+using static Assertions;
+using static BytecodeConstants;
 /*
     Stack Frame:
 
@@ -21,11 +22,11 @@ public static unsafe class SLVM {
 
     private const int  StackSize = 1024 * 1024 * 8; // 8mb stack
     private const uint FrameHeader = 14;
-    private const uint ArgsCountOffset   = 1;
-    private const uint LocalsCountOffset = 2;
-    private const uint RetSizeOffset     = 6;
-    private const uint PrevFpOffset      = 10;
-    private const uint OldPcOffset       = 14;
+    private const uint ArgsCountOffset      = 1;
+    private const uint LocalsCountOffset    = 2;
+    private const uint RetSizeOffset        = 6;
+    private const uint PrevFpOffset         = 10;
+    private const uint OldPcOffset          = 14;
 
     public static void Init() {
         Stack  = null;
@@ -48,12 +49,7 @@ public static unsafe class SLVM {
             return 1;
         }
 
-        uint main = Readu32(bytes, ref pc);
-
-        if (main < 8) {
-            err.Push("Incorrent executable. Main function in wrong position");
-            return 2;
-        }
+        uint main = GetFunctionByIndex(bytes, 0);
 
             pc = main; // program counter
         var fp = main; // frame pointer
@@ -65,7 +61,8 @@ public static unsafe class SLVM {
                 case func : {
                 } break;
                 case call : {
-                    var newPc     = Readu32(bytes, ref pc);
+                    var index     = Readu32(bytes, ref pc);
+                    var newPc     = GetFunctionByIndex(bytes, index);
                     var oldPc     = pc;
                     pc = newPc;
                     var argsCount   = Readu8(bytes, ref pc);
@@ -195,8 +192,6 @@ public static unsafe class SLVM {
 
         return s;
     }
-
-
 
     public static Opcode ReadCode(byte[] bytes, ref uint ptr) {
         var opcode = (Opcode)Readu16(bytes, ref ptr);
@@ -648,9 +643,119 @@ public static unsafe class SLVM {
         StackCurrent += count;
     }
 
+    private static uint GetFunctionByIndex(byte[] bytes, uint index) {
+        var funCount = Readu32(bytes, FunctionsCountOffset);
+        if (index >= funCount) {
+            Err.Push("Function index % is out of range %-%", index, 0, funCount);
+            return 0;
+        }
+
+        // 8 is size of funcIndex(4B) + funPos(4B)
+        var offset = 8 * index;
+
+        Assert(Readu32(bytes, FunctionsOffset + offset) == index, $"Function indices are not identical! Trying to get {index}, got {Readu32(bytes, FunctionsOffset + offset)}");
+
+        offset += 4;
+
+        return Readu32(bytes, FunctionsOffset + offset);
+    }
+
+    private static long Reads64(byte[] bytes, uint ptr) {
+        var i = (long)(bytes[ptr]           |
+                       bytes[ptr + 1] << 8  |
+                       bytes[ptr + 2] << 16 |
+                       bytes[ptr + 3] << 24 |
+                       bytes[ptr + 4] << 32 |
+                       bytes[ptr + 5] << 40 |
+                       bytes[ptr + 6] << 48 |
+                       bytes[ptr + 7] << 56);
+
+        return i;
+    }
+
+    private static ulong Readu64(byte[] bytes, uint ptr) {
+        var i = (ulong)(bytes[ptr]           |
+                        bytes[ptr + 1] << 8  |
+                        bytes[ptr + 2] << 16 |
+                        bytes[ptr + 3] << 24 |
+                        bytes[ptr + 4] << 32 |
+                        bytes[ptr + 5] << 40 |
+                        bytes[ptr + 6] << 48 |
+                        bytes[ptr + 7] << 56);
+
+        return i;
+    }
+
+    private static int Reads32(byte[] bytes, uint ptr) {
+        var i = bytes[ptr]           |
+                bytes[ptr + 1] << 8  |
+                bytes[ptr + 2] << 16 |
+                bytes[ptr + 3] << 24;
+
+        return i;
+    }
+
+    private static uint Readu32(byte[] bytes, uint ptr) {
+        var i = (uint)(bytes[ptr]           |
+                       bytes[ptr + 1] << 8  |
+                       bytes[ptr + 2] << 16 |
+                       bytes[ptr + 3] << 24);
+
+        return i;
+    }
+
+    private static short Reads16(byte[] bytes, uint ptr) {
+        var i = (short)(bytes[ptr] |
+                        bytes[ptr + 1] << 8);
+
+        return i;
+    }
+
+    private static ushort Readu16(byte[] bytes, uint ptr) {
+        var i = (ushort)(bytes[ptr] |
+                         bytes[ptr + 1] << 8);
+
+        return i;
+    }
+
+    private static sbyte Reads8(byte[] bytes, uint ptr) {
+        var i = (sbyte)(bytes[ptr]);
+
+        return i;
+    }
+
+    private static byte Readu8(byte[] bytes, uint ptr) {
+        var i = bytes[ptr];
+
+        return i;
+    }
+
+    private static float Readfloat(byte[] bytes, uint ptr) {
+        var i = Readu32(bytes, ptr);
+        return *(float*)&i;
+    }
+
+    private static double Readdouble(byte[] bytes, uint ptr) {
+        var i = Readu64(bytes, ptr);
+        return *(double*)&i;
+    }
+
     public static string BytecodeToString(byte[] bytes, int count) {
         var  sb = new StringBuilder();
-        uint pc = 8;
+        uint pc = 4;
+
+        // print function table
+        var funCount = Readu32(bytes, ref pc);
+
+        for (var i = 0; i < funCount; ++i) {
+            var index = Readu32(bytes, ref pc);
+            var pos   = Readu32(bytes, ref pc);
+
+            sb.Append(index);
+            sb.Append(':');
+            sb.Append(pos);
+            sb.Append('\n');
+        }
 
         while (pc < count) {
             var opcode = ReadCode(bytes, ref pc);
