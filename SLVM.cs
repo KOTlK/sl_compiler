@@ -50,9 +50,32 @@ public static unsafe class SLVM {
         }
 
         uint main = GetFunctionByIndex(bytes, 0);
+		pc = main;
+        var  mainArgCount = Readu8(bytes, ref pc);
+        var  mainLocCount = Readu8(bytes, ref pc);
+        var  mainRetSize  = Readu32(bytes, ref pc);
 
-            pc = main; // program counter
-        var fp = main; // frame pointer
+        var fp   = pc; // frame pointer
+
+        StackPush(pc);
+        StackPush(fp);
+        StackPush(mainRetSize);
+        StackPush(mainLocCount);
+        StackPush(mainArgCount);
+        fp = StackCurrent;
+        var mainFp = fp;
+
+        for (var i = 0; i < mainArgCount; ++i) {
+            StackPush(Readu16(bytes, ref pc));
+        }
+
+        ushort locOffset = 0;
+        for (var i = 0; i < mainLocCount; ++i) {
+            locOffset = Readu16(bytes, ref pc);
+            StackPush(locOffset);
+        }
+        // reserve space for local variables
+        StackPushZeros(locOffset);
 
         while (pc < count) {
             var opcode = ReadCode(bytes, ref pc);
@@ -98,8 +121,10 @@ public static unsafe class SLVM {
                     StackPush(a - b);
                 } break;
                 case ret : {
-                    if (fp == main) {
-                        return StackPops32();
+                    if (fp == mainFp) {
+                        var ret = StackPops32();
+                        StackCurrent -= FrameHeader;
+                        return ret;
                     }
 
                     var oldPc       = ReadOldPc(fp);
@@ -740,7 +765,7 @@ public static unsafe class SLVM {
         return *(double*)&i;
     }
 
-    public static string BytecodeToString(byte[] bytes, int count) {
+    public static string BytecodeToString(byte[] bytes, uint count) {
         var  sb = new StringBuilder();
         uint pc = 4;
 

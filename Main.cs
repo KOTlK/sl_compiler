@@ -10,6 +10,7 @@ using TMPro;
 using static TokenType;
 using static AstParser;
 using static Opcode;
+using static Tests;
 
 #if UNITY_EDITOR || UNITY_STANDALONE
 public class Main : MonoBehaviour {
@@ -84,54 +85,8 @@ public static class Program {
         // }
 
         // Print(sb.ToString());
-        var cu = new CodeUnit(256);
-        cu.Push(3);
-        cu.Push(0);
-        cu.Push(0);
-        cu.Push(1);
-        cu.Push(0);
-        cu.Push(2);
-        cu.Push(0);
-        var firstFun = cu.PushFunction(2, 2, 4, 4, 4, 4, 4);
-        cu.SetFunctionPos(1, firstFun);
-        Console.WriteLine(firstFun);
-        cu.Pushlarg(0);
-        cu.Pushslocal(0);
-        cu.Pushlarg(1);
-        cu.Pushslocal(1);
-        cu.Pushllocal(0);
-        cu.Pushllocal(1);
-        cu.Push(add_s32);
-        cu.Push(ret);
-        var secondFun = cu.PushFunction(2, 0, 4, 4, 4);
-        Console.WriteLine(secondFun);
-        cu.SetFunctionPos(2, secondFun);
-        cu.Pushlarg(0);
-        cu.Pushlarg(1);
-        cu.PushCall(10);
-        cu.Push(ret);
-        cu.PushMain(0);
-        cu.Push(push_s32, 10);
-        cu.Push(push_s32, 5);
-        cu.PushCall(1);
-        cu.Push(ret);
 
-        if (File.Exists($"{directory}/Test.cu")) {
-            File.Delete($"{directory}/Test.cu");
-        }
-
-        var f = File.Create($"{directory}/Test.cu");
-        f.Write(cu.Bytes, 0, (int)cu.Count);
-        f.Close();
-
-        SLVM.Init();
-
-        Print(SLVM.BytecodeToString(cu.Bytes, (int)cu.Count));
-        var r = SLVM.Run(cu, err);
-
-        Print(r.ToString());
-
-        Print($"StackLeft: {SLVM.StackCurrent}");
+        Tests.RunAllTests();
     }
 
     private static void Print(string str) {
