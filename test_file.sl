@@ -29,13 +29,11 @@ struct int3 {
 }
 
 main :: () -> s32 {
-    hello := 2;
-    world := 10;
+    hello : s32 = 5;
+    world : s32;
+    world = 10;
 
-    total := add(hello, world) + 15 / 2;
-    add(hello, total);
-
-    return total;
+    return hello + world;
 }
 
 add :: (a: s32, b: s32) -> s32 {

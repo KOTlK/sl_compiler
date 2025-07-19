@@ -104,13 +104,15 @@ public unsafe class CodeUnit {
         return p;
     }
 
-    public void PushMain(byte localsCount, params ushort[] locals) {
+    public uint PushMain(byte localsCount, params ushort[] locals) {
         var p = PushFunction(0, localsCount, 4, locals);
 
         Bytes[MainPos]     = (byte)( p        & 0xFF);
         Bytes[MainPos + 1] = (byte)((p >> 8)  & 0xFF);
         Bytes[MainPos + 2] = (byte)((p >> 16) & 0xFF);
         Bytes[MainPos + 3] = (byte)((p >> 24) & 0xFF);
+
+        return p;
     }
 
     public void PushCall(uint funcPos) {

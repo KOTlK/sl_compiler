@@ -26,12 +26,12 @@ public static class Program {
         var directory  = $"{AppDomain.CurrentDomain.BaseDirectory}";
 #endif
         var path      = $"{directory}/test_file.sl";
-        // var text      = File.ReadAllText(path);
+        var text      = File.ReadAllText(path);
         var err       = new ErrorStream();
-        // var sb        = new StringBuilder();
-        // var lexer     = new Lexer(text, err);
-
-        // var ast = AstParser.Parse(lexer, err);
+        var sb        = new StringBuilder();
+        var lexer     = new Lexer(text, err);
+        var ast       = AstParser.Parse(lexer, err);
+        SLVM.Init(err);
 
         // var token = lexer.EatToken();
 
@@ -58,35 +58,58 @@ public static class Program {
         //     token = lexer.EatToken();
         // }
 
-        // if(err.Count > 0) {
-        //     Print(err.ToString());
-        // }
+        if(err.Count > 0) {
+            Print(err.ToString());
+        }
 
-        // foreach(var node in ast.Typedefs) {
-        //     var indent = 0;
-        //     node.Draw(sb, ref indent);
-        //     sb.Append('\n', 1);
-        // }
+        foreach(var node in ast.Typedefs) {
+            var indent = 0;
+            node.Draw(sb, ref indent);
+            sb.Append('\n', 1);
+        }
 
-        // sb.Append('\n', 3);
+        sb.Append('\n', 3);
 
-        // foreach(var node in ast.Functions) {
-        //     var indent = 0;
-        //     node.Draw(sb, ref indent);
-        //     sb.Append('\n', 1);
-        // }
+        foreach(var node in ast.Functions) {
+            var indent = 0;
+            node.Draw(sb, ref indent);
+            sb.Append('\n', 1);
+        }
 
-        // sb.Append('\n', 3);
+        sb.Append('\n', 3);
 
-        // foreach(var node in ast.Nodes) {
-        //     var indent = 0;
-        //     node.Draw(sb, ref indent);
-        //     sb.Append('\n', 3);
-        // }
+        foreach(var node in ast.Nodes) {
+            var indent = 0;
+            node.Draw(sb, ref indent);
+            sb.Append('\n', 3);
+        }
 
-        // Print(sb.ToString());
+        Print(sb.ToString());
 
-        Tests.RunAllTests();
+        var cu = BytecodeConverter.AstToBytecode(ast, err);
+
+        if(err.Count > 0) {
+            Print(err.ToString());
+        }
+
+        var bytecode = SLVM.BytecodeToString(cu.Bytes, cu.Count);
+
+        if(err.Count > 0) {
+            Print(err.ToString());
+        }
+
+        Print(bytecode);
+
+        var run = SLVM.Run(cu, err);
+
+        if(err.Count > 0) {
+            Print(err.ToString());
+        }
+
+        Print(run.ToString());
+        Print(SLVM.StackCurrent.ToString());
+
+        // Tests.RunAllTests();
     }
 
     private static void Print(string str) {

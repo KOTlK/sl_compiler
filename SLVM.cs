@@ -28,12 +28,14 @@ public static unsafe class SLVM {
     private const uint PrevFpOffset         = 10;
     private const uint OldPcOffset          = 14;
 
-    public static void Init() {
+    public static void Init(ErrorStream err) {
         Stack  = null;
         Stack  = new byte[StackSize];
+        Err    = err;
     }
 
     public static int Run(CodeUnit exe, ErrorStream err) {
+        StackCurrent = 0;
         Err        = err;
         var  bytes = exe.Bytes;
         var  count = exe.Count;
@@ -123,7 +125,15 @@ public static unsafe class SLVM {
                 case ret : {
                     if (fp == mainFp) {
                         var ret = StackPops32();
-                        StackCurrent -= FrameHeader;
+                        // я ебал майкрософт.
+                        var aCount   = ReadArgsCount(fp);
+                        uint bck       = FrameHeader;
+
+                        if (aCount != 0) {
+                            bck += ReadArgOffset((byte)(aCount - 1), fp);
+                        }
+
+                        StackCurrent = fp - bck;
                         return ret;
                     }
 

@@ -101,6 +101,7 @@ public class AstNode {
                 } else {
                     sb.Append(' ', indent * spaces);
                     sb.Append($"{Ident.String}: {TypeInfo.Name}");
+                    sb.Append('\n');
                 }
                 if (Stmt != null) {
                     Stmt.Draw(sb, ref indent);

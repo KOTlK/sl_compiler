@@ -83,22 +83,16 @@ public static class AstParser {
 
 
     private static AstNode ParseAssignment(Lexer lexer, ErrorStream err) {
-        var prev  = lexer.Previous();
-        // var next  = lexer.Peek();
-        var ident = prev.Type == TokenType.Ident ? prev : lexer.Previous(2);
+        var name = lexer.Previous();
 
-        // ident = expr; == assign
+        if (AssertSymbol(name, TokenType.Ident, err)) return null;
+
+        var ident = MakeIdent(name.StringValue);
+
         lexer.EatToken();
-        var assign = MakeAssign(MakeIdent(ident.StringValue),
-                                ParseExpression(lexer, err, -9999));
+        var assign = MakeAssign(ident, ParseExpression(lexer, err, -9999));
 
-        if(prev.Type == Colon) {
-            // @Incomplete suggest type of the expression;
-            // ident := expr; == vardecl + assign
-            var vardecl = MakeVar(assign.Ident, null, assign);
-
-            assign = vardecl;
-        }
+        if (AssertSymbol(lexer.EatToken(), Semicolon, err)) return null;
 
         return assign;
     }
@@ -367,6 +361,9 @@ public static class AstParser {
 
             switch (currentToken.Type) {
                 case CParen : return nodes;
+                case TokenType.Colon : {
+                    nodes.Add(ParseVardecl(lexer, err));
+                } break;
                 case TokenType.Equals :
                     nodes.Add(ParseAssignment(lexer, err));
                     break;
@@ -391,6 +388,62 @@ public static class AstParser {
         if (AssertSymbol(lexer.GetCurrent(), CParen, err)) return null;
 
         return nodes;
+    }
+
+    private static AstNode ParseVardecl(Lexer lexer, ErrorStream err) {
+        var name = lexer.Previous();
+
+        if (AssertSymbol(name, TokenType.Ident, err)) return null;
+
+        var ident = MakeIdent(name.StringValue);
+        var next  = lexer.EatToken();
+
+        if (next.Type == TokenType.Equals) {
+            // a := 10;
+            lexer.EatToken();
+            var assign  = MakeAssign(ident, ParseExpression(lexer, err, -9999));
+            var vardecl = MakeVar(ident, assign.Expression.TypeInfo, assign);
+
+            if (AssertSymbol(lexer.EatToken(), Semicolon, err)) return null;
+
+            return vardecl;
+        } else if (next.Type == TokenType.Ident) {
+            // a : s32 = 10;
+            // or
+            // a : s32;
+            var type = TypeSystem.GetType(next.StringValue);
+
+            next = lexer.EatToken();
+
+            if (next.Type == Semicolon) {
+                // a : s32;
+                lexer.EatToken();
+                return MakeVar(ident, type);
+            } else if (next.Type == TokenType.Equals) {
+                // a : s32 = 10;
+                lexer.EatToken();
+                var assign  = MakeAssign(ident, ParseExpression(lexer, err, -9999));
+                var vardecl = MakeVar(ident, type, assign);
+
+                if (AssertSymbol(lexer.EatToken(), Semicolon, err)) return null;
+
+                return vardecl;
+            } else {
+                err.Push("unexpected symbol at %:%. Expected % or %, got %", next.Line,
+                                                                             next.Column,
+                                                                             TokenType.Semicolon,
+                                                                             TokenType.Equals,
+                                                                             next.Type);
+                return null;
+            }
+        } else {
+            err.Push("unexpected symbol at %:%. Expected % or %, got %", next.Line,
+                                                                         next.Column,
+                                                                         TokenType.Equals,
+                                                                         TokenType.Ident,
+                                                                         next.Type);
+            return null;
+        }
     }
 
     private static AstNode ParseFuncall(Lexer lexer, ErrorStream err) {

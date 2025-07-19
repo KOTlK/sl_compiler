@@ -70,7 +70,7 @@ public static class Tests {
         f.Write(cu.Bytes, 0, (int)cu.Count);
         f.Close();
 
-        SLVM.Init();
+        SLVM.Init(err);
 
         Console.WriteLine(SLVM.BytecodeToString(cu.Bytes, cu.Count));
         var r = SLVM.Run(cu, err);
