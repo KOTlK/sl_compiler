@@ -28,10 +28,11 @@ public static class Program {
         var path      = $"{directory}/test_file.sl";
         var text      = File.ReadAllText(path);
         var err       = new ErrorStream();
+        Context.Init(err);
         var sb        = new StringBuilder();
-        var lexer     = new Lexer(text, err);
-        var ast       = AstParser.Parse(lexer, err);
-        SLVM.Init(err);
+        var lexer     = new Lexer(text);
+        var ast       = AstParser.Parse(lexer);
+        SLVM.Init();
 
         // var token = lexer.EatToken();
 
@@ -60,6 +61,7 @@ public static class Program {
 
         if(err.Count > 0) {
             Print(err.ToString());
+            return;
         }
 
         foreach(var node in ast.Typedefs) {
@@ -86,24 +88,27 @@ public static class Program {
 
         Print(sb.ToString());
 
-        var cu = BytecodeConverter.AstToBytecode(ast, err);
+        var cu = BytecodeConverter.AstToBytecode(ast);
 
         if(err.Count > 0) {
             Print(err.ToString());
+            return;
         }
 
         var bytecode = SLVM.BytecodeToString(cu.Bytes, cu.Count);
 
         if(err.Count > 0) {
             Print(err.ToString());
+            return;
         }
 
         Print(bytecode);
 
-        var run = SLVM.Run(cu, err);
+        var run = SLVM.Run(cu);
 
         if(err.Count > 0) {
             Print(err.ToString());
+            return;
         }
 
         Print(run.ToString());

@@ -29,8 +29,8 @@ struct int3 {
 }
 
 main :: () -> s32 {
-    hello : s32 = 5;
-    world : s32;
+    hello: s32 = 5;
+    world: s32;
     world = 10;
 
     return hello + world;

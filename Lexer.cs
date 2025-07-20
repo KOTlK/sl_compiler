@@ -4,6 +4,7 @@ using Enum = System.Enum;
 using System.Runtime.InteropServices;
 
 using static TokenType;
+using static Context;
 
 public struct Token {
     public TokenType Type;
@@ -31,7 +32,6 @@ public class Lexer {
     public int         Line;
     public int         LineStart;
     public int         Len;
-    public ErrorStream Err;
 
     private StringBuilder sb;
 
@@ -49,7 +49,7 @@ public class Lexer {
         "static",
     };
 
-    public Lexer(string text, ErrorStream err) {
+    public Lexer(string text) {
         Text      = text;
         TextPtr   = 0;
         TokensPtr = 0;
@@ -58,7 +58,6 @@ public class Lexer {
         Tokens    = ListPool<Token>.Get();
         sb        = new StringBuilder();
         Len       = text.Length;
-        Err       = err;
     }
 
     public void Reset() {

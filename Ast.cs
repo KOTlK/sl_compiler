@@ -1,7 +1,9 @@
 using System.Collections.Generic;
+using System.Text;
 
 using static AstType;
 using static TokenType;
+using static Context;
 
 public class Ast {
     public List<AstNode> Typedefs  = new List<AstNode>();
@@ -14,34 +16,30 @@ public class Ast {
 }
 
 public static class AstParser {
-    public static Ast Parse(Lexer lexer, ErrorStream err) {
+    public static Ast Parse(Lexer lexer) {
         TypeSystem.Init();
         var root = new Ast();
+        lexer.EatToken();
 
         while (lexer.GetCurrent().Type != EndOfFile) {
             var currentToken = lexer.GetCurrent();
             switch (currentToken.Type) {
-                case TokenType.Equals :
-                    root.Add(ParseAssignment(lexer, err));
-                    break;
-                case TokenType.Return :
-                    root.Add(ParseReturn(lexer, err));
-                    break;
                 case TokenType.Struct :
-                    root.Typedefs.Add(ParseTypedef(lexer, err));
+                    root.Typedefs.Add(ParseTypedef(lexer));
                     break;
                 case TokenType.Ident : {
                     var next  = lexer.Peek();
 
                     if (next.Type == DoubleColon) {
-                        root.Functions.Add(ParseFundef(lexer, err));
+                        root.Functions.Add(ParseFundef(lexer));
                     } else {
                         currentToken = lexer.EatToken();
                     }
                 } break;
                 default :
-                    currentToken = lexer.EatToken();
-                    break;
+                    currentToken = lexer.GetCurrent();
+                    Err.Push("unexpected token at %:%. Expected % or %, got %", currentToken.Line, currentToken.Column, TokenType.Struct, TokenType.Ident, currentToken.Type);
+                    return null;
             }
         }
 
@@ -82,22 +80,25 @@ public static class AstParser {
     // }
 
 
-    private static AstNode ParseAssignment(Lexer lexer, ErrorStream err) {
-        var name = lexer.Previous();
-
-        if (AssertSymbol(name, TokenType.Ident, err)) return null;
+    private static AstNode ParseAssignment(Lexer lexer) {
+        var name = lexer.GetCurrent();
+        if (AssertSymbol(name, TokenType.Ident)) return null;
 
         var ident = MakeIdent(name.StringValue);
 
-        lexer.EatToken();
-        var assign = MakeAssign(ident, ParseExpression(lexer, err, -9999));
+        var equals = lexer.EatToken();
+        if (AssertSymbol(equals, TokenType.Equals)) return null;
 
-        if (AssertSymbol(lexer.EatToken(), Semicolon, err)) return null;
+        lexer.EatToken();
+        var assign = MakeAssign(ident, ParseExpression(lexer, -9999));
+
+        if (AssertSymbol(lexer.EatToken(), Semicolon)) return null;
+        lexer.EatToken();
 
         return assign;
     }
 
-    private static AstNode ParseReturn(Lexer lexer, ErrorStream err) {
+    private static AstNode ParseReturn(Lexer lexer) {
         var node      = new AstNode();
         node.Type     = StatementReturn;
 
@@ -108,22 +109,23 @@ public static class AstParser {
             return node;
         }
 
-        node.Expression = ParseExpression(lexer, err, -9999);
+        node.Expression = ParseExpression(lexer, -9999);
         lexer.EatToken();
 
-        if (AssertSymbol(lexer.GetCurrent(), Semicolon, err)) return null;
+        if (AssertSymbol(lexer.GetCurrent(), Semicolon)) return null;
+        lexer.EatToken();
 
         return node;
     }
 
-    public static AstNode ParseExpression(Lexer lexer, ErrorStream err, int prec) {
+    public static AstNode ParseExpression(Lexer lexer, int prec) {
         var token = lexer.GetCurrent();
         AstNode left = null;
 
         switch(token.Type) {
             case TokenType.Ident : {
                 if (lexer.Peek().Type == ORParen) {
-                    left = ParseFuncall(lexer, err);
+                    left = ParseFuncall(lexer);
                 } else {
                     left = MakeIdent(token.StringValue);
                 }
@@ -141,7 +143,7 @@ public static class AstParser {
             } break;
             case TokenType.ORParen : {
                 lexer.EatToken();
-                left = ParseExpression(lexer, err, -9999);
+                left = ParseExpression(lexer, -9999);
                 lexer.EatToken();
             } break;
             case TokenType.Minus : {
@@ -160,7 +162,7 @@ public static class AstParser {
                     } else if (next.Type == TokenType.CharLiteral) {
                         node.Right = MakeLiteral(next, TypeSystem.Char);
                     } else {
-                        node.Right = ParseExpression(lexer, err, prec);
+                        node.Right = ParseExpression(lexer, prec);
                     }
                     left = node;
                 }
@@ -187,7 +189,7 @@ public static class AstParser {
             node.IsBinary     = true;
             node.Left         = left;
             lexer.EatToken();
-            node.Right        = ParseExpression(lexer, err, tokenPrec + 1);
+            node.Right        = ParseExpression(lexer, tokenPrec + 1);
 
             left = node;
         }
@@ -195,7 +197,7 @@ public static class AstParser {
         return left;
     }
 
-    private static AstNode ParseTypedef(Lexer lexer, ErrorStream err) {
+    private static AstNode ParseTypedef(Lexer lexer) {
         var name      = lexer.EatToken();
         var next      = lexer.EatToken();
         var node      = new AstNode();
@@ -205,10 +207,7 @@ public static class AstParser {
         type.Name     = name.StringValue;
         type.Fields   = new List<FieldInfo>();
 
-        if (next.Type != OParen) {
-            err.UnexpectedSymbol(next.Line, next.Column, OParen, next.Type);
-            return null;
-        }
+        if (AssertSymbol(next, OParen)) return null;
 
         uint align = 1;
         uint size  = 0;
@@ -217,31 +216,16 @@ public static class AstParser {
             next          = lexer.EatToken();
             if (next.Type == CParen) break;
 
-            if (next.Type != TokenType.Ident) {
-                err.UnexpectedSymbol(next.Line, next.Column, TokenType.Ident, next.Type);
-                return null;
-            }
+            if (AssertMultipleSymbol(next, TokenType.Ident, CParen)) return null;
 
             var colon     = lexer.EatToken();
-
-            if (colon.Type != Colon) {
-                err.UnexpectedSymbol(colon.Line, colon.Column, Colon, colon.Type);
-                return null;
-            }
+            if (AssertSymbol(colon, Colon)) return null;
 
             var fieldType = lexer.EatToken();
-
-            if (fieldType.Type != TokenType.Ident) {
-                err.UnexpectedSymbol(fieldType.Line, fieldType.Column, TokenType.Ident, fieldType.Type);
-                return null;
-            }
+            if (AssertSymbol(fieldType, TokenType.Ident)) return null;
 
             var semicolon = lexer.EatToken();
-
-            if (semicolon.Type != Semicolon) {
-                err.UnexpectedSymbol(semicolon.Line, semicolon.Column, Semicolon, semicolon.Type);
-                return null;
-            }
+            if (AssertSymbol(semicolon, Semicolon)) return null;
 
             var field = new FieldInfo();
 
@@ -255,12 +239,10 @@ public static class AstParser {
             size += field.Type.Size;
 
             type.Fields.Add(field);
-
         }
 
-        if(next.Type == EndOfFile) {
-            err.UnexpectedSymbol(next.Line, next.Column, CParen, EndOfFile);
-        }
+        if (AssertSymbol(lexer.GetCurrent(), CParen)) return null;
+        lexer.EatToken();
 
         type.Align = align;
         type.Size  = size;
@@ -268,24 +250,25 @@ public static class AstParser {
         var add = TypeSystem.RegisterType(type);
 
         if (!add) {
-            err.TypeAlreadyDefined(name.Line, name.Column, name.StringValue);
+            Err.TypeAlreadyDefined(name.Line, name.Column, name.StringValue);
             return null;
         }
 
         return node;
     }
 
-    private static AstNode ParseFundef(Lexer lexer, ErrorStream err) {
+    private static AstNode ParseFundef(Lexer lexer) {
         var node      = new AstNode();
         node.Type     = StatementFundef;
         var name      = lexer.GetCurrent();
         node.Ident    = MakeIdent(name.StringValue);
 
         var c1        = lexer.EatToken();
-        if (AssertSymbol(c1, DoubleColon, err)) return null;
+        if (AssertSymbol(c1, DoubleColon)) return null;
 
         var next = lexer.EatToken();
-        if (AssertSymbol(next, ORParen, err)) return null;
+        if (AssertSymbol(next, ORParen)) return null;
+        if (AssertMultipleSymbol(lexer.Peek(), CRParen, TokenType.Ident)) return null;
 
         if (lexer.Peek().Type != CRParen) {
             node.Args = new List<AstNode>();
@@ -295,20 +278,20 @@ public static class AstParser {
 
                 if (next.Type == Comma) next = lexer.EatToken();
                 if (next.Type == CRParen) break;
-                if (AssertSymbol(next, TokenType.Ident, err)) return null;
+                if (AssertSymbol(next, TokenType.Ident)) return null;
 
                 var colon = lexer.EatToken();
-                if (AssertSymbol(colon, Colon, err)) return null;
+                if (AssertSymbol(colon, Colon)) return null;
 
                 var ident       = MakeIdent(next.StringValue);
                 AstNode  assign = null;
                 TypeInfo type   = null;
 
-                // @Incomplete suggest type of argument
+                // @Incomplete suggest type of an argument
                 if (lexer.Peek().Type == TokenType.Equals) {
                     lexer.EatToken();
                     lexer.EatToken();
-                    assign = MakeAssign(ident, ParseExpression(lexer, err, -9999));
+                    assign = MakeAssign(ident, ParseExpression(lexer, -9999));
                     if (assign.Expression.Type == AstType.IntLiteral ||
                         assign.Expression.Type == AstType.FloatLiteral ||
                         assign.Expression.Type == AstType.DoubleLiteral ||
@@ -318,6 +301,7 @@ public static class AstParser {
                     }
                 } else {
                     var t = lexer.EatToken();
+                    if (AssertSymbol(t, TokenType.Ident)) return null;
                     type  = TypeSystem.GetType(t.StringValue);
                 }
 
@@ -330,81 +314,106 @@ public static class AstParser {
         }
 
         var cur = lexer.GetCurrent();
-        if (AssertSymbol(cur, CRParen, err)) return null;
+        if (AssertSymbol(cur, CRParen)) return null;
 
         var arrow = lexer.EatToken();
 
         if (arrow.Type == OParen) {
             node.TypeInfo = TypeSystem.Void;
         } else {
-            if (AssertSymbol(arrow, ArrowRight, err)) return null;
+            if (AssertSymbol(arrow, ArrowRight)) return null;
 
             var tp = lexer.EatToken();
-            if (AssertSymbol(tp, TokenType.Ident, err)) return null;
+            if (AssertSymbol(tp, TokenType.Ident)) return null;
 
             node.TypeInfo = TypeSystem.GetType(tp.StringValue);
             lexer.EatToken();
         }
 
-        node.Body = ParseBody(lexer, err);
+        node.Body = ParseBody(lexer);
 
         return node;
     }
 
-    private static List<AstNode> ParseBody(Lexer lexer, ErrorStream err) {
+    private static List<AstNode> ParseBody(Lexer lexer) {
         var nodes = new List<AstNode>();
 
-        if (AssertSymbol(lexer.GetCurrent(), OParen, err)) return null;
+        if (AssertSymbol(lexer.GetCurrent(), OParen)) return null;
+        lexer.EatToken();
 
         while (lexer.GetCurrent().Type != EndOfFile) {
-            var currentToken = lexer.EatToken();
+            var currentToken = lexer.GetCurrent();
 
             switch (currentToken.Type) {
-                case CParen : return nodes;
-                case TokenType.Colon : {
-                    nodes.Add(ParseVardecl(lexer, err));
-                } break;
-                case TokenType.Equals :
-                    nodes.Add(ParseAssignment(lexer, err));
-                    break;
+                case CParen : {
+                    lexer.EatToken();
+                    return nodes;
+                }
                 case TokenType.Return : {
-                    nodes.Add(ParseReturn(lexer, err));
+                    nodes.Add(ParseReturn(lexer));
                 } break;
                 case TokenType.Ident : {
                     var next = lexer.Peek();
 
                     if (next.Type == ORParen) {
-                        nodes.Add(ParseFuncall(lexer, err));
+                        nodes.Add(ParseFuncall(lexer));
                         var semicolon = lexer.EatToken();
 
-                        if (AssertSymbol(semicolon, Semicolon, err)) return null;
+                        if (AssertSymbol(semicolon, Semicolon)) return null;
+                    } else if (next.Type == Colon) {
+                        nodes.Add(ParseVardecl(lexer));
+                    } else if (next.Type == TokenType.Equals) {
+                        nodes.Add(ParseAssignment(lexer));
+                    } else {
+                        Err.Push("unexpected symbol at %:%. Expected % or % or % or %, got %.",
+                                  next.Line,
+                                  next.Column,
+                                  TokenType.Colon,
+                                  TokenType.Equals,
+                                  TokenType.CParen,
+                                  "Statement",
+                                  next.Type);
+                        return null;
                     }
                     break;
                 }
-                default : break;
+                default : {
+                    Err.Push("unexpected symbol at %:%. Expected % or % or %, got %.",
+                              currentToken.Line,
+                              currentToken.Column,
+                              TokenType.Return,
+                              TokenType.Ident,
+                              TokenType.CParen,
+                              currentToken.Type);
+                    return null;
+                }
             }
         }
 
-        if (AssertSymbol(lexer.GetCurrent(), CParen, err)) return null;
+        if (AssertSymbol(lexer.GetCurrent(), CParen)) return null;
+        lexer.EatToken();
 
         return nodes;
     }
 
-    private static AstNode ParseVardecl(Lexer lexer, ErrorStream err) {
-        var name = lexer.Previous();
-
-        if (AssertSymbol(name, TokenType.Ident, err)) return null;
+    private static AstNode ParseVardecl(Lexer lexer) {
+        var name = lexer.GetCurrent();
+        if (AssertSymbol(name, TokenType.Ident)) return null;
 
         var ident = MakeIdent(name.StringValue);
         var next  = lexer.EatToken();
+        if (AssertSymbol(next, TokenType.Colon)) return null;
+
+        next = lexer.EatToken();
 
         if (next.Type == TokenType.Equals) {
             // a := 10;
             lexer.EatToken();
-            var assign  = MakeAssign(ident, ParseExpression(lexer, err, -9999));
+            var assign  = MakeAssign(ident, ParseExpression(lexer, -9999));
             var vardecl = MakeVar(ident, assign.Expression.TypeInfo, assign);
 
-            if (AssertSymbol(lexer.EatToken(), Semicolon, err)) return null;
+            if (AssertSymbol(lexer.EatToken(), Semicolon)) return null;
+            lexer.EatToken();
 
             return vardecl;
         } else if (next.Type == TokenType.Ident) {
@@ -422,14 +431,15 @@ public static class AstParser {
             } else if (next.Type == TokenType.Equals) {
                 // a : s32 = 10;
                 lexer.EatToken();
-                var assign  = MakeAssign(ident, ParseExpression(lexer, err, -9999));
+                var assign  = MakeAssign(ident, ParseExpression(lexer, -9999));
                 var vardecl = MakeVar(ident, type, assign);
 
-                if (AssertSymbol(lexer.EatToken(), Semicolon, err)) return null;
+                if (AssertSymbol(lexer.EatToken(), Semicolon)) return null;
+                lexer.EatToken();
 
                 return vardecl;
             } else {
-                err.Push("unexpected symbol at %:%. Expected % or %, got %", next.Line,
+                Err.Push("unexpected symbol at %:%. Expected % or %, got %", next.Line,
                                                                              next.Column,
                                                                              TokenType.Semicolon,
                                                                              TokenType.Equals,
@@ -437,7 +447,7 @@ public static class AstParser {
                 return null;
             }
         } else {
-            err.Push("unexpected symbol at %:%. Expected % or %, got %", next.Line,
+            Err.Push("unexpected symbol at %:%. Expected % or %, got %", next.Line,
                                                                          next.Column,
                                                                          TokenType.Equals,
                                                                          TokenType.Ident,
@@ -446,7 +456,7 @@ public static class AstParser {
         }
     }
 
-    private static AstNode ParseFuncall(Lexer lexer, ErrorStream err) {
+    private static AstNode ParseFuncall(Lexer lexer) {
         var name      = lexer.GetCurrent();
         var node      = new AstNode();
         node.Type     = StatementFuncall;
@@ -459,7 +469,7 @@ public static class AstParser {
             lexer.EatToken();
 
             var semicolon = lexer.EatToken();
-            if (AssertSymbol(semicolon, Semicolon, err)) return null;
+            if (AssertSymbol(semicolon, Semicolon)) return null;
 
             return node;
         }
@@ -467,19 +477,19 @@ public static class AstParser {
         node.Args = new List<AstNode>();
 
         while (lexer.GetCurrent().Type != EndOfFile) {
-            var arg  = ParseExpression(lexer, err, -9999);
+            var arg  = ParseExpression(lexer, -9999);
             var next = lexer.EatToken();
 
             node.Args.Add(arg);
 
             if (next.Type == CRParen) break;
-            if (AssertSymbol(next, Comma, err)) return null;
+            if (AssertSymbol(next, Comma)) return null;
 
             lexer.EatToken();
         }
 
         cparen = lexer.GetCurrent();
-        if (AssertSymbol(cparen, CRParen, err)) return null;
+        if (AssertSymbol(cparen, CRParen)) return null;
 
         return node;
     }
@@ -664,12 +674,43 @@ public static class AstParser {
         return null;
     }
 
-    private static bool AssertSymbol(Token token, TokenType type, ErrorStream err) {
+    private static bool AssertSymbol(Token token, TokenType type) {
         if (token.Type != type) {
-            err.UnexpectedSymbol(token.Line, token.Column, type, token.Type);
+            Err.UnexpectedSymbol(token.Line, token.Column, type, token.Type);
             return true;
         }
 
         return false;
+    }
+
+    private static StringBuilder AssertSb = new StringBuilder();
+    private static bool AssertMultipleSymbol(Token token, params TokenType[] types) {
+        for (var i = 0; i < types.Length; ++i) {
+            if (token.Type == types[i]) {
+                return false;
+            }
+        }
+
+        AssertSb.Clear();
+
+        AssertSb.Append("unexpected symbol at ");
+        AssertSb.Append(token.Line.ToString());
+        AssertSb.Append(':');
+        AssertSb.Append(token.Column.ToString());
+        AssertSb.Append(". Expected ");
+        AssertSb.Append(types[0]);
+
+        for (var i = 1; i < types.Length; ++i) {
+            AssertSb.Append(" or ");
+            AssertSb.Append(types[i].ToString());
+        }
+
+        AssertSb.Append(", got ");
+        AssertSb.Append(token.Type.ToString());
+        AssertSb.Append('.');
+
+        Err.Push(AssertSb.ToString());
+
+        return true;
     }
 }

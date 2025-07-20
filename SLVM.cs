@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using static Opcode;
 using static Assertions;
 using static BytecodeConstants;
+using static Context;
 /*
     Stack Frame:
 
@@ -18,25 +19,13 @@ public static unsafe class SLVM {
     public static byte[]            Stack;
     public static uint              StackCurrent;
 
-    private static ErrorStream Err;
-
-    private const int  StackSize = 1024 * 1024 * 8; // 8mb stack
-    private const uint FrameHeader = 14;
-    private const uint ArgsCountOffset      = 1;
-    private const uint LocalsCountOffset    = 2;
-    private const uint RetSizeOffset        = 6;
-    private const uint PrevFpOffset         = 10;
-    private const uint OldPcOffset          = 14;
-
-    public static void Init(ErrorStream err) {
+    public static void Init() {
         Stack  = null;
         Stack  = new byte[StackSize];
-        Err    = err;
     }
 
-    public static int Run(CodeUnit exe, ErrorStream err) {
+    public static int Run(CodeUnit exe) {
         StackCurrent = 0;
-        Err        = err;
         var  bytes = exe.Bytes;
         var  count = exe.Count;
         uint pc    = 0;
@@ -47,7 +36,7 @@ public static unsafe class SLVM {
             bytes[2] != 0x00 ||
             bytes[3] != 0x8A) {
 
-            err.Push("Incorrent executable. Wrong mask");
+            Err.Push("Incorrent executable. Wrong mask");
             return 1;
         }
 
@@ -154,7 +143,7 @@ public static unsafe class SLVM {
                     if (localsCount > 0) {
                         localsOffset = ReadLocalOffset((byte)(localsCount - 1), fp);
                     }
-                    var start = fp + (uint)argsCount * 2 + (uint)localsCount * 2 + localsOffset;
+                    var start = fp + (uint)argsCount * ArgOffsetSize + (uint)localsCount * LocalOffsetSize + localsOffset;
                     StackPush(start, retSize);
                     fp = oldFp;
                     pc = oldPc;
@@ -184,7 +173,7 @@ public static unsafe class SLVM {
                     StackSetLocal(index, fp);
                 } break;
                 default : {
-                    err.Push("Unknown opcode at %", pc);
+                    Err.Push("Unknown opcode at %", pc);
                     return 3;
                 }
             }
@@ -576,7 +565,7 @@ public static unsafe class SLVM {
     }
 
     public static ushort ReadArgOffset(byte index, uint fp) {
-        var start = fp + index * 2;
+        var start = fp + index * ArgOffsetSize;
 
         var s = (ushort)(Stack[start + 0]   |
                          Stack[start + 1] << 8);
@@ -599,7 +588,7 @@ public static unsafe class SLVM {
             offset -= size;
         }
 
-        var start = fp + argsCount * 2 + localsCount * 2 + offset;
+        var start = fp + argsCount * ArgOffsetSize + localsCount * LocalOffsetSize + offset;
 
         StackSet(StackCurrent - size, start, size);
         StackCurrent -= size;
@@ -619,7 +608,7 @@ public static unsafe class SLVM {
             offset -= size;
         }
 
-        var start = (fp + argsCount * 2 + localsCount * 2) + offset;
+        var start = (fp + argsCount * ArgOffsetSize + localsCount * LocalOffsetSize) + offset;
 
         var i = Stack[start]           |
                 Stack[start + 1] << 8  |
@@ -642,14 +631,14 @@ public static unsafe class SLVM {
             offset -= size;
         }
 
-        var start = (fp + argsCount * 2 + localsCount * 2) + offset;
+        var start = (fp + argsCount * ArgOffsetSize + localsCount * LocalOffsetSize) + offset;
 
         StackPush(start, size);
     }
 
     public static ushort ReadLocalOffset(byte index, uint fp) {
         var argsCount = (uint)ReadArgsCount(fp);
-        var start     = (fp + argsCount * 2) + index * 2;
+        var start     = (fp + argsCount * ArgOffsetSize) + index * LocalOffsetSize;
 
         var s = (ushort)(Stack[start + 0]   |
                          Stack[start + 1] << 8);

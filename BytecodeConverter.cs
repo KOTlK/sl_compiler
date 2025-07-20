@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using static AstType;
 using static Opcode;
 using static TypeSystem;
+using static Context;
 
 public static class BytecodeConverter {
     public struct Function {
@@ -22,7 +23,7 @@ public static class BytecodeConverter {
         }
     }
 
-    public static CodeUnit AstToBytecode(Ast ast, ErrorStream err) {
+    public static CodeUnit AstToBytecode(Ast ast) {
         var cu       = new CodeUnit(2048);
         var funcs    = DictionaryPool<string, Function>.Get();
         var vars     = DictionaryPool<string, byte>.Get();

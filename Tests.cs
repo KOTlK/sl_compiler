@@ -13,6 +13,8 @@ public enum TestResult {
 
 public static class Tests {
     public static TestResult RunAllTests() {
+        var err = new ErrorStream();
+        Context.Init(err);
         var result = TestResult.OK;
 
         if (BytecodeFuncall() != TestResult.OK) {
@@ -32,7 +34,6 @@ public static class Tests {
         var directory  = $"{AppDomain.CurrentDomain.BaseDirectory}";
 #endif
         var cu  = new CodeUnit(256);
-        var err = new ErrorStream();
         cu.Push(3);
         cu.Push(0);
         cu.Push(0);
@@ -70,10 +71,10 @@ public static class Tests {
         f.Write(cu.Bytes, 0, (int)cu.Count);
         f.Close();
 
-        SLVM.Init(err);
+        SLVM.Init();
 
         Console.WriteLine(SLVM.BytecodeToString(cu.Bytes, cu.Count));
-        var r = SLVM.Run(cu, err);
+        var r = SLVM.Run(cu);
 
         if (r != 15)                return TestResult.NOTOK;
         if (SLVM.StackCurrent != 0) return TestResult.NOTOK;
