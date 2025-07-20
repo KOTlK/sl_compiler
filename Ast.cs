@@ -38,7 +38,7 @@ public static class AstParser {
                 } break;
                 default :
                     currentToken = lexer.GetCurrent();
-                    Err.Push("unexpected token at %:%. Expected % or %, got %", currentToken.Line, currentToken.Column, TokenType.Struct, TokenType.Ident, currentToken.Type);
+                    Err.Push("unexpected symbol at %:%. Expected % or %, got %", currentToken.Line, currentToken.Column, TokenType.Struct, TokenType.Ident, currentToken.Type);
                     return null;
             }
         }
