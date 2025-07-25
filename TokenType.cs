@@ -19,7 +19,7 @@ public enum TokenType : ushort {
     And           = '&',
     Or            = '|',
     Hash          = '#',
-    At            = '@',
+    Psina         = '@',
     SQuote        = '\'',
     DQuote        = '"',
     Dot           = '.',

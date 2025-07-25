@@ -58,6 +58,12 @@ public static class Program {
 
         //     token = lexer.EatToken();
         // }
+        var ok = Tests.RunAllTests();
+
+        if (ok != TestResult.OK) {
+            Print(err.ToString());
+            return;
+        }
 
         if(err.Count > 0) {
             Print(err.ToString());
@@ -114,7 +120,6 @@ public static class Program {
         Print(run.ToString());
         Print(SLVM.StackCurrent.ToString());
 
-        // Tests.RunAllTests();
     }
 
     private static void Print(string str) {

@@ -6,6 +6,15 @@ using static Opcode;
 using static Assertions;
 using static BytecodeConstants;
 using static Context;
+
+public struct StackFrame {
+    public int  Index;
+    public uint Fp;
+    public uint OldPc;
+    public uint RetSize;
+    public List<ushort> Offsets;
+}
+
 /*
     Stack Frame:
 
@@ -14,18 +23,31 @@ args [n-0] | old pc | prev fp | ret size | localsCount | argsCount | arg offsets
                                                                    ^
                                                                    |
                                                        New frame pointer points here
+
+
+    args[0-N] + locals | stack
+   ^
+   |
+   Frame pointer
 */
 public static unsafe class SLVM {
     public static byte[]            Stack;
+    public static StackFrame[]      Frames;
     public static uint              StackCurrent;
+    public static int               CurrentFrame;
+
+    private const int MaxFrames = 4096;
 
     public static void Init() {
-        Stack  = null;
-        Stack  = new byte[StackSize];
+        Stack        = null;
+        Stack        = new byte[StackSize];
+        Frames       = new StackFrame[MaxFrames];
+        CurrentFrame = -1;
     }
 
     public static int Run(CodeUnit exe) {
         StackCurrent = 0;
+		CurrentFrame = -1;
         var  bytes = exe.Bytes;
         var  count = exe.Count;
         uint pc    = 0;
@@ -42,31 +64,24 @@ public static unsafe class SLVM {
 
         uint main = GetFunctionByIndex(bytes, 0);
 		pc = main;
-        var  mainArgCount = Readu8(bytes, ref pc);
-        var  mainLocCount = Readu8(bytes, ref pc);
-        var  mainRetSize  = Readu32(bytes, ref pc);
+		Readu8(bytes, ref pc); // argsCount not needed for main
+        var  mainOffsetsCount = Readu8(bytes, ref pc);
+        var  mainRetSize      = Readu32(bytes, ref pc);
+        var  mainOffsets      = ListPool<ushort>.Get();
 
-        var fp   = pc; // frame pointer
-
-        StackPush(pc);
-        StackPush(fp);
-        StackPush(mainRetSize);
-        StackPush(mainLocCount);
-        StackPush(mainArgCount);
-        fp = StackCurrent;
-        var mainFp = fp;
-
-        for (var i = 0; i < mainArgCount; ++i) {
-            StackPush(Readu16(bytes, ref pc));
+        ushort mainOffset = 0;
+        for (var i = 0; i < mainOffsetsCount; ++i) {
+            mainOffset = Readu16(bytes, ref pc);
+            mainOffsets.Add(mainOffset);
         }
 
-        ushort locOffset = 0;
-        for (var i = 0; i < mainLocCount; ++i) {
-            locOffset = Readu16(bytes, ref pc);
-            StackPush(locOffset);
-        }
+        PushStackFrame(StackCurrent,
+                       pc,
+                       mainRetSize,
+                       mainOffsets);
+
         // reserve space for local variables
-        StackPushZeros(locOffset);
+        StackPushZeros(mainOffset);
 
         while (pc < count) {
             var opcode = ReadCode(bytes, ref pc);
@@ -79,27 +94,29 @@ public static unsafe class SLVM {
                     var newPc     = GetFunctionByIndex(bytes, index);
                     var oldPc     = pc;
                     pc = newPc;
-                    var argsCount   = Readu8(bytes, ref pc);
-                    var localsCount = Readu8(bytes, ref pc);
-                    var retSize     = Readu32(bytes, ref pc);
-                    StackPush(oldPc);
-                    StackPush(fp);
-                    StackPush(retSize);
-                    StackPush(localsCount);
-                    StackPush(argsCount);
-                    fp = StackCurrent;
+                    var argsCount    = Readu8(bytes, ref pc);
+                    var offsetsCount = Readu8(bytes, ref pc);
+                    var retSize      = Readu32(bytes, ref pc);
+                    var offsets      = ListPool<ushort>.Get();
 
-                    for (var i = 0; i < argsCount; ++i) {
-                        StackPush(Readu16(bytes, ref pc));
+                    ushort offset = 0;
+                    for (var i = 0; i < offsetsCount; ++i) {
+                        offset = Readu16(bytes, ref pc);
+                        offsets.Add(offset);
                     }
 
-                    ushort localOffset = 0;
-                    for (var i = 0; i < localsCount; ++i) {
-                        localOffset = Readu16(bytes, ref pc);
-                        StackPush(localOffset);
-                    }
+                    var fp = StackCurrent;
                     // reserve space for local variables
-                    StackPushZeros(localOffset);
+                    StackPushZeros(offset);
+
+                    if (argsCount > 0) {
+                        fp -= offsets[argsCount - 1];
+                    }
+
+                    PushStackFrame(fp,
+                                   oldPc,
+                                   retSize,
+                                   offsets);
                 } break;
                 case add_s32 : {
                     var a = StackPops32();
@@ -112,41 +129,24 @@ public static unsafe class SLVM {
                     StackPush(a - b);
                 } break;
                 case ret : {
-                    if (fp == mainFp) {
+                    if (CurrentFrame == 0) {
                         var ret = StackPops32();
-                        // я ебал майкрософт.
-                        var aCount   = ReadArgsCount(fp);
-                        uint bck       = FrameHeader;
 
-                        if (aCount != 0) {
-                            bck += ReadArgOffset((byte)(aCount - 1), fp);
-                        }
+                        var SF = PopStackFrame();
 
-                        StackCurrent = fp - bck;
+                        StackCurrent -= SF.Offsets.Last();
+
                         return ret;
                     }
 
-                    var oldPc       = ReadOldPc(fp);
-                    var oldFp       = ReadOldFp(fp);
-                    var retSize     = ReadRetSize(fp);
-                    var localsCount = ReadLocalsCount(fp);
-                    var argsCount   = ReadArgsCount(fp);
-                    uint back       = FrameHeader;
+                    var sf = PopStackFrame();
 
-                    if (argsCount != 0) {
-                        back += ReadArgOffset((byte)(argsCount - 1), fp);
-                    }
+                    var start    = StackCurrent - sf.RetSize;
+                    StackCurrent = sf.Fp;
 
-                    StackCurrent = fp - back;
-                    ushort localsOffset = 0;
-
-                    if (localsCount > 0) {
-                        localsOffset = ReadLocalOffset((byte)(localsCount - 1), fp);
-                    }
-                    var start = fp + (uint)argsCount * ArgOffsetSize + (uint)localsCount * LocalOffsetSize + localsOffset;
-                    StackPush(start, retSize);
-                    fp = oldFp;
-                    pc = oldPc;
+                    StackPush(start, sf.RetSize);
+                    pc = sf.OldPc;
+                    FreeStackFrame(sf);
                 } break;
                 case push_s32 : {
                     StackPush(Reads32(bytes, ref pc));
@@ -159,18 +159,13 @@ public static unsafe class SLVM {
                     StackPops32();
                     break;
                 }
-                case larg : {
-                    var index = Readu8(bytes, ref pc);
-                    StackPushArg(index, fp);
-                    break;
-                }
                 case llocal : {
                     var index = Readu8(bytes, ref pc);
-                    StackPushLocal(index, fp);
+                    StackPushLocal(index);
                 } break;
                 case slocal : {
                     var index = Readu8(bytes, ref pc);
-                    StackSetLocal(index, fp);
+                    StackSetLocal(index);
                 } break;
                 default : {
                     Err.Push("Unknown opcode at %", pc);
@@ -182,39 +177,42 @@ public static unsafe class SLVM {
         return StackPops32();
     }
 
-    public static byte ReadArgsCount(uint fp) {
-        return Stack[fp - ArgsCountOffset];
+    public static int PushStackFrame(uint fp,
+                                     uint oldpc,
+                                     uint retSize,
+                                     List<ushort> offsets) {
+        var sf = new StackFrame();
+        CurrentFrame += 1;
+
+        if (CurrentFrame >= MaxFrames) {
+            Err.Push("Stack Overflow caused by huge amount of stack frames.");
+            return 0;
+        }
+
+        sf.Index   = CurrentFrame;
+        sf.Fp      = fp;
+        sf.OldPc   = oldpc;
+        sf.RetSize = retSize;
+        sf.Offsets = offsets;
+
+        Frames[CurrentFrame] = sf;
+
+        return CurrentFrame;
     }
 
-    public static byte ReadLocalsCount(uint fp) {
-        return Stack[fp - LocalsCountOffset];
+    public static StackFrame PopStackFrame() {
+        var sf = Frames[CurrentFrame];
+
+        CurrentFrame -= 1;
+        return sf;
     }
 
-    public static uint ReadRetSize(uint fp) {
-        var s = (uint)(Stack[fp - RetSizeOffset]           |
-                       Stack[fp - RetSizeOffset - 1] << 8  |
-                       Stack[fp - RetSizeOffset - 2] << 16 |
-                       Stack[fp - RetSizeOffset - 3] << 24);
-
-        return s;
+    public static ref StackFrame GetCurrentStackFrame() {
+        return ref Frames[CurrentFrame];
     }
 
-    public static uint ReadOldFp(uint fp) {
-        var s = (uint)(Stack[fp - PrevFpOffset]           |
-                       Stack[fp - PrevFpOffset - 1] << 8  |
-                       Stack[fp - PrevFpOffset - 2] << 16 |
-                       Stack[fp - PrevFpOffset - 3] << 24);
-
-        return s;
-    }
-
-    public static uint ReadOldPc(uint fp) {
-        var s = (uint)(Stack[fp - OldPcOffset]           |
-                       Stack[fp - OldPcOffset - 1] << 8  |
-                       Stack[fp - OldPcOffset - 2] << 16 |
-                       Stack[fp - OldPcOffset - 3] << 24);
-
-        return s;
+    public static void FreeStackFrame(StackFrame sf) {
+        ListPool<ushort>.Release(sf.Offsets);
     }
 
     public static Opcode ReadCode(byte[] bytes, ref uint ptr) {
@@ -550,100 +548,39 @@ public static unsafe class SLVM {
         return *(double*)&i;
     }
 
-    public static void StackPushArg(byte index, uint fp) {
-        var offset  = ReadArgOffset(index, fp);
-        var size    = offset;
-
-        // if index == 0 size = offset
-        if(index != 0) {
-            size -= ReadArgOffset((byte)(index - 1), fp);
-        }
-
-        var start   = (fp - FrameHeader) - offset;
-
-        StackPush(start, size);
-    }
-
-    public static ushort ReadArgOffset(byte index, uint fp) {
-        var start = fp + index * ArgOffsetSize;
-
-        var s = (ushort)(Stack[start + 0]   |
-                         Stack[start + 1] << 8);
-
-        return s;
-    }
-
-    // @Incomplete
-    public static void StackSetLocal(byte index, uint fp) {
-        var argsCount   = (uint)ReadArgsCount(fp);
-        var localsCount = (uint)ReadLocalsCount(fp);
-        var offset      = ReadLocalOffset(index, fp);
+    public static void StackSetLocal(byte index) {
+        ref var sf      = ref GetCurrentStackFrame();
+        var offset      = sf.Offsets[index];
         var size        = offset;
 
         if (index == 0) {
             offset = 0;
         } else {
-            // why the fuck byte - 1 is int expression???????????????
-            size   -= ReadLocalOffset((byte)(index - 1), fp);
+            size   -= sf.Offsets[index - 1];
             offset -= size;
         }
 
-        var start = fp + argsCount * ArgOffsetSize + localsCount * LocalOffsetSize + offset;
+        var start = sf.Fp + offset;
 
         StackSet(StackCurrent - size, start, size);
         StackCurrent -= size;
     }
 
-    // @Debug
-    public static int StackReadLocal(byte index, uint fp) {
-        var argsCount   = (uint)ReadArgsCount(fp);
-        var localsCount = (uint)ReadLocalsCount(fp);
-        var offset      = ReadLocalOffset(index, fp);
+    public static void StackPushLocal(byte index) {
+        ref var sf      = ref GetCurrentStackFrame();
+        var offset      = sf.Offsets[index];
         var size        = offset;
 
         if (index == 0) {
             offset = 0;
         } else {
-            size   -= ReadLocalOffset((byte)(index - 1), fp);
+            size   -= sf.Offsets[index - 1];
             offset -= size;
         }
 
-        var start = (fp + argsCount * ArgOffsetSize + localsCount * LocalOffsetSize) + offset;
-
-        var i = Stack[start]           |
-                Stack[start + 1] << 8  |
-                Stack[start + 2] << 16 |
-                Stack[start + 3] << 24;
-
-        return i;
-    }
-
-    public static void StackPushLocal(byte index, uint fp) {
-        var argsCount   = (uint)ReadArgsCount(fp);
-        var localsCount = (uint)ReadLocalsCount(fp);
-        var offset      = ReadLocalOffset(index, fp);
-        var size        = offset;
-
-        if (index == 0) {
-            offset = 0;
-        } else {
-            size   -= ReadLocalOffset((byte)(index - 1), fp);
-            offset -= size;
-        }
-
-        var start = (fp + argsCount * ArgOffsetSize + localsCount * LocalOffsetSize) + offset;
+        var start = sf.Fp + offset;
 
         StackPush(start, size);
-    }
-
-    public static ushort ReadLocalOffset(byte index, uint fp) {
-        var argsCount = (uint)ReadArgsCount(fp);
-        var start     = (fp + argsCount * ArgOffsetSize) + index * LocalOffsetSize;
-
-        var s = (ushort)(Stack[start + 0]   |
-                         Stack[start + 1] << 8);
-
-        return s;
     }
 
     public static void StackSet(uint from, uint to, uint size) {
@@ -787,22 +724,17 @@ public static unsafe class SLVM {
             switch (opcode) {
                 case func : {
                     sb.Append(".func");
-                    var argCount = Readu8(bytes, ref pc);
+                    var argsCount = Readu8(bytes, ref pc);
                     sb.Append(' ');
-                    sb.Append(argCount.ToString());
-                    var localsCount = Readu8(bytes, ref pc);
+                    sb.Append(argsCount.ToString());
+                    var offsetsCount = Readu8(bytes, ref pc);
                     sb.Append(' ');
-                    sb.Append(localsCount.ToString());
+                    sb.Append(offsetsCount.ToString());
                     var retSize = Readu32(bytes, ref pc);
                     sb.Append(' ');
                     sb.Append(retSize.ToString());
 
-                    for (int i = 0; i < argCount; ++i) {
-                        sb.Append(' ');
-                        sb.Append(Readu16(bytes, ref pc));
-                    }
-
-                    for (int i = 0; i < localsCount; ++i) {
+                    for (int i = 0; i < offsetsCount; ++i) {
                         sb.Append(' ');
                         sb.Append(Readu16(bytes, ref pc));
                     }
@@ -832,12 +764,6 @@ public static unsafe class SLVM {
                     sb.Append(' ');
                     var val = Reads32(bytes, ref pc);
                     sb.Append(val.ToString());
-                } break;
-                case larg : {
-                    sb.Append(opcode.ToString());
-                    sb.Append(' ');
-                    var index = Readu8(bytes, ref pc);
-                    sb.Append(index.ToString());
                 } break;
                 case llocal : {
                     sb.Append(opcode.ToString());

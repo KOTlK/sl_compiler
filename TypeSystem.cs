@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 
+using static AstType;
+
 public class TypeInfo {
     public string          Name;
     public uint            Align;
@@ -120,11 +122,13 @@ public static class TypeSystem {
     }
 
     public static TypeInfo GetType(string name) {
-        if(IsPrimitive(name)) {
+        if (IsPrimitive(name)) {
             return GetPrimitive(name);
         }
 
-        return Types[name];
+        if (Types.ContainsKey(name)) return Types[name];
+
+        return null;
     }
 
     public static bool IsPrimitive(TypeInfo type) {

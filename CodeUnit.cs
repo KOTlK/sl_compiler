@@ -49,11 +49,6 @@ public unsafe class CodeUnit {
         }
     }
 
-    public void Pushlarg(byte index) {
-        Push(larg);
-        Push(index);
-    }
-
     public void Pushllocal(byte index) {
         Push(llocal);
         Push(index);
@@ -64,48 +59,40 @@ public unsafe class CodeUnit {
         Push(index);
     }
 
-    public uint PushFunction(byte argCount, byte localsCount, uint retSize, List<ushort> argsAndLocals) {
+    public uint PushFunction(byte argsCount, uint retSize, List<ushort> argsAndLocals) {
         Push(func);
         var p = Count;
-        Push(argCount);
-        Push(localsCount);
+        Push(argsCount);
+        Push((byte)argsAndLocals.Count);
         Push(retSize);
+
         ushort offset = 0;
-        for (var i = 0; i < argCount; ++i) {
+        for (var i = 0; i < argsAndLocals.Count; ++i) {
             offset += argsAndLocals[i];
             Push(offset);
         }
 
-        offset = 0;
-        for (var i = 0; i < localsCount; ++i) {
-            offset += argsAndLocals[argCount + i];
-            Push(offset);
-        }
         return p;
     }
 
-    public uint PushFunction(byte argCount, byte localsCount, uint retSize, params ushort[] argsAndLocals) {
+    public uint PushFunction(byte argsCount, uint retSize, params ushort[] argsAndLocals) {
         Push(func);
         var p = Count;
-        Push(argCount);
-        Push(localsCount);
+        Push(argsCount);
+        Push((byte)argsAndLocals.Length);
         Push(retSize);
+
         ushort offset = 0;
-        for (var i = 0; i < argCount; ++i) {
+        for (var i = 0; i < argsAndLocals.Length; ++i) {
             offset += argsAndLocals[i];
             Push(offset);
         }
 
-        offset = 0;
-        for (var i = 0; i < localsCount; ++i) {
-            offset += argsAndLocals[argCount + i];
-            Push(offset);
-        }
         return p;
     }
 
-    public uint PushMain(byte localsCount, params ushort[] locals) {
-        var p = PushFunction(0, localsCount, 4, locals);
+    public uint PushMain(params ushort[] locals) {
+        var p = PushFunction(0, 4, locals);
 
         Bytes[MainPos]     = (byte)( p        & 0xFF);
         Bytes[MainPos + 1] = (byte)((p >> 8)  & 0xFF);
@@ -115,9 +102,9 @@ public unsafe class CodeUnit {
         return p;
     }
 
-    public void PushCall(uint funcPos) {
+    public void PushCall(uint index) {
         Push(call);
-        Push(funcPos);
+        Push(index);
     }
 
     public int GetMain() {
