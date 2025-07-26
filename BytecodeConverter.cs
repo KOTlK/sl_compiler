@@ -127,25 +127,27 @@ public static class BytecodeConverter {
     private static void ExpressionToBytecode(ushort reg, ushort addReg, CodeUnit cu, AstNode expr, Dictionary<string, ushort> vars) {
         switch(expr.Type) {
             case Operator : {
-                ExpressionToBytecode(reg, (ushort)(addReg + 1), cu, expr.Left, vars);
-                ExpressionToBytecode(addReg, (ushort)(addReg + 1), cu, expr.Right, vars);
+                ushort a = addReg;
+                ExpressionToBytecode(a, (ushort)(addReg + 1), cu, expr.Left, vars);
+                var b = (ushort)(addReg + 1); // fuck you
+                ExpressionToBytecode(b, (ushort)(addReg + 2), cu, expr.Right, vars);
 
                 // @Incomplete
                 switch(expr.OperatorType) {
                     case TokenType.Plus : {
-                        cu.PushAdd(add_s32, reg, reg, addReg);
+                        cu.PushAdd(add_s32, reg, a, b);
                     } break;
                     case TokenType.Minus : {
-                        cu.PushAdd(sub_s32, reg, reg, addReg);
+                        cu.PushAdd(sub_s32, reg, a, b);
                     } break;
                     case TokenType.Mul : {
-                        cu.PushAdd(mul_s32, reg, reg, addReg);
+                        cu.PushAdd(mul_s32, reg, a, b);
                     } break;
                     case TokenType.Div : {
-                        cu.PushAdd(div_s32, reg, reg, addReg);
+                        cu.PushAdd(div_s32, reg, a, b);
                     } break;
                     case TokenType.Mod : {
-                        cu.PushAdd(mod_s32, reg, reg, addReg);
+                        cu.PushAdd(mod_s32, reg, a, b);
                     } break;
                 }
             } break;
