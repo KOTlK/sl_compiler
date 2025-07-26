@@ -53,6 +53,7 @@ public static unsafe class SLVM {
         uint main = GetFunctionByIndex(bytes, 0);
 		pc = main;
 		var mainRegCount  = Readu16(bytes, ref pc);
+		Readu16(bytes, ref pc); // dont need args count
 
         var sf = PushStackFrame(StackCurrent, pc, 0, (uint)mainRegCount - 1);
 
@@ -64,62 +65,95 @@ public static unsafe class SLVM {
                 } break;
                 case call : {
                     var index     = Readu32(bytes, ref pc);
-                    var argReg    = Readu16(bytes, ref pc);
                     var newPc     = GetFunctionByIndex(bytes, index);
                     var oldPc     = pc;
                     pc = newPc;
                     var regCount  = Readu16(bytes, ref pc);
-                    var regStart  = sf.RegStart + argReg;
+                    var argCount  = Readu16(bytes, ref pc);
+                    var regStart  = sf.RegEnd - (argCount - (uint)1); // is this a joke?
                     var regEnd    = regStart + regCount - 1;
 
                     sf = PushStackFrame(StackCurrent, oldPc, regStart, regEnd);
                 } break;
-                case add : {
+                case add_s32 : {
                     // Garbage in - garbage out
                     ref var dest = ref GetRegister(Readu16(bytes, ref pc));
                     ref var a    = ref GetRegister(Readu16(bytes, ref pc));
                     ref var b    = ref GetRegister(Readu16(bytes, ref pc));
 
-                    switch(dest.Type) {
-                        case RegisterType.u8 : {
-                            // why the fuck i need to do the cast to add 2 bytes? fuck you, microsoft
-                            dest.u8 = (byte)(a.u8 + b.u8);
-                        } break;
-                        case RegisterType.s8 : {
-                            dest.s8 = (sbyte)(a.s8 + b.s8);
-                        } break;
-                        case RegisterType.u16 : {
-                            dest.u16 = (ushort)(a.u16 + b.u16);
-                        } break;
-                        case RegisterType.s16 : {
-                            dest.s16 = (short)(a.s16 + b.s16);
-                        } break;
-                        case RegisterType.u32 : {
-                            dest.u32 = a.u32 + b.u32;
-                        } break;
-                        case RegisterType.s32 : {
-                            dest.s32 = a.s32 + b.s32;
-                        } break;
-                        case RegisterType.u64 : {
-                            dest.u64 = a.u64 + b.u64;
-                        } break;
-                        case RegisterType.s64 : {
-                            dest.s64 = a.s64 + b.s64;
-                        } break;
-                        case RegisterType.Float : {
-                            dest.Float = a.Float + b.Float;
-                        } break;
-                        case RegisterType.Double : {
-                            dest.Double = a.Double + b.Double;
-                        } break;
-                        case RegisterType.Pointer : {
-                            dest.Pointer = a.Pointer + b.Pointer;
-                        } break;
-                        default : {
-                            Err.Push("Cannot add %", dest.Type.ToString());
-                            return 1;
-                        }
-                    }
+                    dest.s32 = a.s32 + b.s32;
+                } break;
+                case add_u32 : {
+                    // Garbage in - garbage out
+                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
+
+                    dest.u32 = a.u32 + b.u32;
+                } break;
+                case add_s64 : {
+                    // Garbage in - garbage out
+                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
+
+                    dest.s64 = a.s64 + b.s64;
+                } break;
+                case add_u64 : {
+                    // Garbage in - garbage out
+                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
+
+                    dest.u64 = a.u64 + b.u64;
+                } break;
+                case fadd : {
+                    // Garbage in - garbage out
+                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
+
+                    dest.Float = a.Float + b.Float;
+                } break;
+                case fadd64 : {
+                    // Garbage in - garbage out
+                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
+
+                    dest.Double = a.Double + b.Double;
+                } break;
+                case sub_s32 : {
+                    // Garbage in - garbage out
+                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
+
+                    dest.s32 = a.s32 - b.s32;
+                } break;
+                case mul_s32 : {
+                    // Garbage in - garbage out
+                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
+
+                    dest.s32 = a.s32 * b.s32;
+                } break;
+                case div_s32 : {
+                    // Garbage in - garbage out
+                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
+
+                    dest.s32 = a.s32 / b.s32;
+                } break;
+                case mod_s32 : {
+                    // Garbage in - garbage out
+                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
+
+                    dest.s32 = a.s32 % b.s32;
                 } break;
                 case ret : {
                     var regId   = Readu16(bytes, ref pc);
@@ -134,6 +168,12 @@ public static unsafe class SLVM {
                     Registers[sf.RegStart] = reg;
 
                     sf = PopStackFrame();
+                } break;
+                case mov : {
+                    var reg = Readu16(bytes, ref pc);
+                    ref var src  = ref GetRegister(Readu16(bytes, ref pc));
+
+                    Registers[reg] = src;
                 } break;
                 case set_s32 : {
                     ref var reg = ref GetRegister(Readu16(bytes, ref pc));
@@ -680,17 +720,37 @@ public static unsafe class SLVM {
                     var regCount = Readu16(bytes, ref pc);
                     sb.Append(' ');
                     sb.Append(regCount.ToString());
+                    var argCount = Readu16(bytes, ref pc);
+                    sb.Append(' ');
+                    sb.Append(argCount.ToString());
                 } break;
                 case call : {
                     sb.Append(opcode.ToString());
                     sb.Append(' ');
                     var index = Readu32(bytes, ref pc);
                     sb.Append(index.ToString());
-                    sb.Append(' ');
-                    var argReg = Readu16(bytes, ref pc);
-                    sb.Append(argReg.ToString());
+                    // sb.Append(' ');
+                    // var argReg = Readu16(bytes, ref pc);
+                    // sb.Append(argReg.ToString());
                 } break;
-                case add : {
+                case mov : {
+                    sb.Append(opcode.ToString());
+                    sb.Append(' ');
+                    sb.Append(Readu16(bytes, ref pc).ToString());
+                    sb.Append(' ');
+                    sb.Append(Readu16(bytes, ref pc).ToString());
+                    sb.Append(' ');
+                } break;
+                case add_u32 :
+                case add_s64 :
+                case add_u64 :
+                case fadd    :
+                case fadd64  :
+                case sub_s32 :
+                case mul_s32 :
+                case div_s32 :
+                case mod_s32 :
+                case add_s32 : {
                     sb.Append(opcode.ToString());
                     sb.Append(' ');
                     var dest = Readu16(bytes, ref pc);

@@ -10,21 +10,26 @@ public static class BytecodeConverter {
     public struct Function {
         public byte         Index;
         public uint         Position;
-        public byte         ArgsCount;
-        public List<ushort> ArgsLocals;
+        public ushort       RegCount;
+        public ushort       ArgCount;
+        public Dictionary<string, ushort> Vars;
 
         public Function(byte index, uint pos) {
             Index       = index;
             Position    = pos;
-            ArgsCount   = 0;
-            ArgsLocals  = new List<ushort>();
+            RegCount    = 0;
+            ArgCount    = 0;
+            Vars        = DictionaryPool<string, ushort>.Get();
+        }
+
+        public void Free() {
+            DictionaryPool<string, ushort>.Release(Vars);
         }
     }
 
     public static CodeUnit AstToBytecode(Ast ast) {
         var cu       = new CodeUnit(2048);
         var funcs    = DictionaryPool<string, Function>.Get();
-        var vars     = DictionaryPool<string, byte>.Get();
         cu.Push(ast.Functions.Count);
         byte funcIndex = 1;
         // push main
@@ -46,18 +51,16 @@ public static class BytecodeConverter {
             }
 
             if (func.Args != null) {
-                f.ArgsCount = (byte)func.Args.Count;
+                f.ArgCount = (ushort)func.Args.Count;
                 foreach (var arg in func.Args) {
-                    vars.Add(arg.Ident.String, (byte)f.ArgsLocals.Count);
-                    f.ArgsLocals.Add((ushort)arg.TypeInfo.Size);
+                    f.Vars.Add(arg.Ident.String, f.RegCount++);
                 }
             }
 
             foreach(var node in func.Body) {
                 switch(node.Type) {
                     case StatementVardecl : {
-                        vars.Add(node.Ident.String, (byte)f.ArgsLocals.Count);
-                        f.ArgsLocals.Add((ushort)node.TypeInfo.Size);
+                        f.Vars.Add(node.Ident.String, f.RegCount++);
                     } break;
                 }
             }
@@ -68,16 +71,17 @@ public static class BytecodeConverter {
         // Second pass. Convert function to bytecode
         foreach (var func in ast.Functions) {
             var name    = func.Ident.String;
-            var retSize = func.TypeInfo.Size;
             var f       = funcs[name];
 
-            var pos     = cu.PushFunction(f.ArgsCount, retSize, f.ArgsLocals);
+            var pos     = cu.PushFunction(f.RegCount, f.ArgCount);
             f.Position  = pos;
             funcs[name] = f;
             cu.SetFunctionPos(f.Index, f.Position);
-            // cu.Push(ret);
 
-            if (func.Body == null) continue;
+            if (func.Body == null)  {
+                cu.PushReturn(0);
+                continue;
+            }
 
             var lastReturn = false;
 
@@ -88,52 +92,73 @@ public static class BytecodeConverter {
 
                         var varName = node.Ident.String;
                         var assign  = node.Stmt;
-                        var v       = vars[varName];
-                        ExpressionToBytecode(cu, assign.Expression, vars);
-                        cu.Pushslocal(v);
+                        var reg     = f.Vars[varName];
+                        ExpressionToBytecode(reg, f.RegCount, cu, assign.Expression, f.Vars);
                     } break;
                     case StatementAssign : {
                         var varName = node.Ident.String;
-                        ExpressionToBytecode(cu, node.Expression, vars);
-
-                        if (vars.ContainsKey(varName)) {
-                            var v = vars[varName];
-                            cu.Pushslocal(v);
-                        }
+                        var reg     = f.Vars[varName];
+                        ExpressionToBytecode(reg, f.RegCount, cu, node.Expression, f.Vars);
                     } break;
                     case StatementReturn : {
                         if (node.Expression != null) {
-                            ExpressionToBytecode(cu, node.Expression, vars);
+                            ExpressionToBytecode(0, f.RegCount, cu, node.Expression, f.Vars);
                         }
-                        cu.Push(ret);
+                        cu.PushReturn(0);
                         lastReturn = true;
                     } break;
                 }
             }
 
             if (!lastReturn) {
-                cu.Push(ret);
+                cu.PushReturn(0);
             }
         }
+
+        foreach(var a in funcs) {
+            a.Value.Free();
+        }
+
+        DictionaryPool<string, Function>.Release(funcs);
 
         return cu;
     }
 
-    private static void ExpressionToBytecode(CodeUnit cu, AstNode expr, Dictionary<string, byte> vars) {
+    private static void ExpressionToBytecode(ushort reg, ushort addReg, CodeUnit cu, AstNode expr, Dictionary<string, ushort> vars) {
         switch(expr.Type) {
             case Operator : {
-                ExpressionToBytecode(cu, expr.Left, vars);
+                ExpressionToBytecode(reg, (ushort)(addReg + 1), cu, expr.Left, vars);
+                ExpressionToBytecode(addReg, (ushort)(addReg + 1), cu, expr.Right, vars);
+
                 // @Incomplete
-                ExpressionToBytecode(cu, expr.Right, vars);
-                cu.Push(add_s32);
+                switch(expr.OperatorType) {
+                    case TokenType.Plus : {
+                        cu.PushAdd(add_s32, reg, reg, addReg);
+                    } break;
+                    case TokenType.Minus : {
+                        cu.PushAdd(sub_s32, reg, reg, addReg);
+                    } break;
+                    case TokenType.Mul : {
+                        cu.PushAdd(mul_s32, reg, reg, addReg);
+                    } break;
+                    case TokenType.Div : {
+                        cu.PushAdd(div_s32, reg, reg, addReg);
+                    } break;
+                    case TokenType.Mod : {
+                        cu.PushAdd(mod_s32, reg, reg, addReg);
+                    } break;
+                }
             } break;
             case IntLiteral : {
-                cu.Push(push_s32, (int)expr.Number.IntValue);
+                cu.Pushset_s32(reg, (int)expr.Number.IntValue);
             } break;
             case Ident : {
                 if (vars.ContainsKey(expr.String)) {
                     var v = vars[expr.String];
-                    cu.Pushllocal(v);
+
+                    if (v != reg) {
+                        cu.PushMov(reg, v);
+                    }
                 }
             } break;
         }

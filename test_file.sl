@@ -33,7 +33,7 @@ main :: () -> s32 {
     world: s32;
     world = 10;
 
-    return hello + world;
+    return 22 * 2 + (world / hello);
 }
 
 add :: (a: s32, b: s32) -> s32 {

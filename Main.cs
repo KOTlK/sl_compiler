@@ -30,8 +30,9 @@ public static class Program {
         var err       = new ErrorStream();
         Context.Init(err);
         var sb        = new StringBuilder();
-        // var ast       = AstParser.Parse(lexer);
-        // SLVM.Init();
+        var lexer     = new Lexer(text);
+        var ast       = AstParser.Parse(lexer);
+        SLVM.Init();
 
         var ok = Tests.RunAllTests();
 
@@ -69,31 +70,31 @@ public static class Program {
 
         // Print(sb.ToString());
 
-        // var cu = BytecodeConverter.AstToBytecode(ast);
+        var cu = BytecodeConverter.AstToBytecode(ast);
 
-        // if(err.Count > 0) {
-        //     Print(err.ToString());
-        //     return;
-        // }
+        if(err.Count > 0) {
+            Print(err.ToString());
+            return;
+        }
 
-        // var bytecode = SLVM.BytecodeToString(cu.Bytes, cu.Count);
+        var bytecode = SLVM.BytecodeToString(cu.Bytes, cu.Count);
 
-        // if(err.Count > 0) {
-        //     Print(err.ToString());
-        //     return;
-        // }
+        if(err.Count > 0) {
+            Print(err.ToString());
+            return;
+        }
 
-        // Print(bytecode);
+        Print(bytecode);
 
-        // var run = SLVM.Run(cu);
+        var run = SLVM.Run(cu);
 
-        // if(err.Count > 0) {
-        //     Print(err.ToString());
-        //     return;
-        // }
+        if(err.Count > 0) {
+            Print(err.ToString());
+            return;
+        }
 
-        // Print(run.ToString());
-        // Print(SLVM.StackCurrent.ToString());
+        Print(run.ToString());
+        Print(SLVM.StackCurrent.ToString());
     }
 
     private static void Print(string str) {

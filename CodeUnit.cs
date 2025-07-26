@@ -55,11 +55,17 @@ public unsafe class CodeUnit {
         Push(val);
     }
 
-    public void PushAdd(ushort dest, ushort a, ushort b) {
-        Push(add);
+    public void PushAdd(Opcode code, ushort dest, ushort a, ushort b) {
+        Push(code);
         Push(dest);
         Push(a);
         Push(b);
+    }
+
+    public void PushMov(ushort dest, ushort src) {
+        Push(mov);
+        Push(dest);
+        Push(src);
     }
 
     public void PushReturn(ushort reg) {
@@ -67,22 +73,22 @@ public unsafe class CodeUnit {
         Push(reg);
     }
 
-    public uint PushFunction(ushort regsCount) {
+    public uint PushFunction(ushort regCount, ushort argCount) {
         Push(func);
         var p = Count;
-        Push(regsCount);
+        Push(regCount);
+        Push(argCount);
 
         return p;
     }
 
-    public void PushCall(uint index, ushort argReg) {
+    public void PushCall(uint index) {
         Push(call);
         Push(index);
-        Push(argReg);
     }
-    
-    public uint PushMain(ushort regsCount) {
-        var p = PushFunction(regsCount);
+
+    public uint PushMain(ushort regCount) {
+        var p = PushFunction(regCount, 0);
 
         Bytes[MainPos]     = (byte)( p        & 0xFF);
         Bytes[MainPos + 1] = (byte)((p >> 8)  & 0xFF);
