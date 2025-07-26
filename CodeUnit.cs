@@ -49,50 +49,40 @@ public unsafe class CodeUnit {
         }
     }
 
-    public void Pushllocal(byte index) {
-        Push(llocal);
-        Push(index);
+    public void Pushset_s32(ushort dest, int val) {
+        Push(set_s32);
+        Push(dest);
+        Push(val);
     }
 
-    public void Pushslocal(byte index) {
-        Push(slocal);
-        Push(index);
+    public void PushAdd(ushort dest, ushort a, ushort b) {
+        Push(add);
+        Push(dest);
+        Push(a);
+        Push(b);
     }
 
-    public uint PushFunction(byte argsCount, uint retSize, List<ushort> argsAndLocals) {
+    public void PushReturn(ushort reg) {
+        Push(ret);
+        Push(reg);
+    }
+
+    public uint PushFunction(ushort regsCount) {
         Push(func);
         var p = Count;
-        Push(argsCount);
-        Push((byte)argsAndLocals.Count);
-        Push(retSize);
-
-        ushort offset = 0;
-        for (var i = 0; i < argsAndLocals.Count; ++i) {
-            offset += argsAndLocals[i];
-            Push(offset);
-        }
+        Push(regsCount);
 
         return p;
     }
 
-    public uint PushFunction(byte argsCount, uint retSize, params ushort[] argsAndLocals) {
-        Push(func);
-        var p = Count;
-        Push(argsCount);
-        Push((byte)argsAndLocals.Length);
-        Push(retSize);
-
-        ushort offset = 0;
-        for (var i = 0; i < argsAndLocals.Length; ++i) {
-            offset += argsAndLocals[i];
-            Push(offset);
-        }
-
-        return p;
+    public void PushCall(uint index, ushort argReg) {
+        Push(call);
+        Push(index);
+        Push(argReg);
     }
-
-    public uint PushMain(params ushort[] locals) {
-        var p = PushFunction(0, 4, locals);
+    
+    public uint PushMain(ushort regsCount) {
+        var p = PushFunction(regsCount);
 
         Bytes[MainPos]     = (byte)( p        & 0xFF);
         Bytes[MainPos + 1] = (byte)((p >> 8)  & 0xFF);
@@ -100,11 +90,6 @@ public unsafe class CodeUnit {
         Bytes[MainPos + 3] = (byte)((p >> 24) & 0xFF);
 
         return p;
-    }
-
-    public void PushCall(uint index) {
-        Push(call);
-        Push(index);
     }
 
     public int GetMain() {

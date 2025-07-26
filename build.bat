@@ -1,1 +1,1 @@
-mcs -sdk:4.5 -define:DEGUB -out:main.exe *.cs /unsafe -debug
+mcs -sdk:4.5 -define:DEBUG -out:main.exe *.cs /unsafe -debug

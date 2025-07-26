@@ -6,31 +6,18 @@ using static Opcode;
 using static Assertions;
 using static BytecodeConstants;
 using static Context;
+using static Register;
 
 public struct StackFrame {
     public int  Index;
-    public uint Fp;
+    public uint RegStart;
+    public uint RegEnd;
     public uint OldPc;
-    public uint RetSize;
-    public List<ushort> Offsets;
+    public uint Fp;
 }
 
-/*
-    Stack Frame:
-
- any size      4B       4B         4B          1B           1B         2B each        2B each     any
-args [n-0] | old pc | prev fp | ret size | localsCount | argsCount | arg offsets | local offsets | locals | stack |
-                                                                   ^
-                                                                   |
-                                                       New frame pointer points here
-
-
-    args[0-N] + locals | stack
-   ^
-   |
-   Frame pointer
-*/
 public static unsafe class SLVM {
+    public static Register[]        Registers;
     public static byte[]            Stack;
     public static StackFrame[]      Frames;
     public static uint              StackCurrent;
@@ -41,6 +28,7 @@ public static unsafe class SLVM {
     public static void Init() {
         Stack        = null;
         Stack        = new byte[StackSize];
+        Registers    = new Register[RegistersCount];
         Frames       = new StackFrame[MaxFrames];
         CurrentFrame = -1;
     }
@@ -64,24 +52,9 @@ public static unsafe class SLVM {
 
         uint main = GetFunctionByIndex(bytes, 0);
 		pc = main;
-		Readu8(bytes, ref pc); // argsCount not needed for main
-        var  mainOffsetsCount = Readu8(bytes, ref pc);
-        var  mainRetSize      = Readu32(bytes, ref pc);
-        var  mainOffsets      = ListPool<ushort>.Get();
+		var mainRegCount  = Readu16(bytes, ref pc);
 
-        ushort mainOffset = 0;
-        for (var i = 0; i < mainOffsetsCount; ++i) {
-            mainOffset = Readu16(bytes, ref pc);
-            mainOffsets.Add(mainOffset);
-        }
-
-        PushStackFrame(StackCurrent,
-                       pc,
-                       mainRetSize,
-                       mainOffsets);
-
-        // reserve space for local variables
-        StackPushZeros(mainOffset);
+        var sf = PushStackFrame(StackCurrent, pc, 0, (uint)mainRegCount - 1);
 
         while (pc < count) {
             var opcode = ReadCode(bytes, ref pc);
@@ -91,81 +64,81 @@ public static unsafe class SLVM {
                 } break;
                 case call : {
                     var index     = Readu32(bytes, ref pc);
+                    var argReg    = Readu16(bytes, ref pc);
                     var newPc     = GetFunctionByIndex(bytes, index);
                     var oldPc     = pc;
                     pc = newPc;
-                    var argsCount    = Readu8(bytes, ref pc);
-                    var offsetsCount = Readu8(bytes, ref pc);
-                    var retSize      = Readu32(bytes, ref pc);
-                    var offsets      = ListPool<ushort>.Get();
+                    var regCount  = Readu16(bytes, ref pc);
+                    var regStart  = sf.RegStart + argReg;
+                    var regEnd    = regStart + regCount - 1;
 
-                    ushort offset = 0;
-                    for (var i = 0; i < offsetsCount; ++i) {
-                        offset = Readu16(bytes, ref pc);
-                        offsets.Add(offset);
-                    }
-
-                    var fp = StackCurrent;
-                    // reserve space for local variables
-                    StackPushZeros(offset);
-
-                    if (argsCount > 0) {
-                        fp -= offsets[argsCount - 1];
-                    }
-
-                    PushStackFrame(fp,
-                                   oldPc,
-                                   retSize,
-                                   offsets);
+                    sf = PushStackFrame(StackCurrent, oldPc, regStart, regEnd);
                 } break;
-                case add_s32 : {
-                    var a = StackPops32();
-                    var b = StackPops32();
-                    StackPush(a + b);
-                } break;
-                case sub_s32 : {
-                    var a = StackPops32();
-                    var b = StackPops32();
-                    StackPush(a - b);
+                case add : {
+                    // Garbage in - garbage out
+                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
+
+                    switch(dest.Type) {
+                        case RegisterType.u8 : {
+                            // why the fuck i need to do the cast to add 2 bytes? fuck you, microsoft
+                            dest.u8 = (byte)(a.u8 + b.u8);
+                        } break;
+                        case RegisterType.s8 : {
+                            dest.s8 = (sbyte)(a.s8 + b.s8);
+                        } break;
+                        case RegisterType.u16 : {
+                            dest.u16 = (ushort)(a.u16 + b.u16);
+                        } break;
+                        case RegisterType.s16 : {
+                            dest.s16 = (short)(a.s16 + b.s16);
+                        } break;
+                        case RegisterType.u32 : {
+                            dest.u32 = a.u32 + b.u32;
+                        } break;
+                        case RegisterType.s32 : {
+                            dest.s32 = a.s32 + b.s32;
+                        } break;
+                        case RegisterType.u64 : {
+                            dest.u64 = a.u64 + b.u64;
+                        } break;
+                        case RegisterType.s64 : {
+                            dest.s64 = a.s64 + b.s64;
+                        } break;
+                        case RegisterType.Float : {
+                            dest.Float = a.Float + b.Float;
+                        } break;
+                        case RegisterType.Double : {
+                            dest.Double = a.Double + b.Double;
+                        } break;
+                        case RegisterType.Pointer : {
+                            dest.Pointer = a.Pointer + b.Pointer;
+                        } break;
+                        default : {
+                            Err.Push("Cannot add %", dest.Type.ToString());
+                            return 1;
+                        }
+                    }
                 } break;
                 case ret : {
+                    var regId   = Readu16(bytes, ref pc);
+                    ref var reg = ref GetRegister(regId);
+
                     if (CurrentFrame == 0) {
-                        var ret = StackPops32();
-
-                        var SF = PopStackFrame();
-
-                        StackCurrent -= SF.Offsets.Last();
-
-                        return ret;
+                        return reg.s32;
                     }
 
-                    var sf = PopStackFrame();
-
-                    var start    = StackCurrent - sf.RetSize;
-                    StackCurrent = sf.Fp;
-
-                    StackPush(start, sf.RetSize);
                     pc = sf.OldPc;
-                    FreeStackFrame(sf);
+
+                    Registers[sf.RegStart] = reg;
+
+                    sf = PopStackFrame();
                 } break;
-                case push_s32 : {
-                    StackPush(Reads32(bytes, ref pc));
-                } break;
-                case push_size : {
-                    var cnt = Readu32(bytes, ref pc);
-                    StackPushZeros(cnt);
-                } break;
-                case pop_s32 : {
-                    StackPops32();
-                    break;
-                }
-                case llocal : {
-                    var index = Readu8(bytes, ref pc);
-                    StackPushLocal(index);
-                } break;
-                case slocal : {
-                    var index = Readu8(bytes, ref pc);
-                    StackSetLocal(index);
+                case set_s32 : {
+                    ref var reg = ref GetRegister(Readu16(bytes, ref pc));
+                    reg.Type = RegisterType.s32;
+                    reg.s32  = Reads32(bytes, ref pc);
                 } break;
                 default : {
                     Err.Push("Unknown opcode at %", pc);
@@ -174,45 +147,52 @@ public static unsafe class SLVM {
             }
         }
 
-        return StackPops32();
+        return 3;
     }
 
-    public static int PushStackFrame(uint fp,
-                                     uint oldpc,
-                                     uint retSize,
-                                     List<ushort> offsets) {
+    public static StackFrame PushStackFrame(uint fp,
+                                            uint oldpc,
+                                            uint regStart,
+                                            uint regEnd) {
         var sf = new StackFrame();
         CurrentFrame += 1;
 
         if (CurrentFrame >= MaxFrames) {
             Err.Push("Stack Overflow caused by huge amount of stack frames.");
-            return 0;
+            return Frames[0];
         }
 
-        sf.Index   = CurrentFrame;
-        sf.Fp      = fp;
-        sf.OldPc   = oldpc;
-        sf.RetSize = retSize;
-        sf.Offsets = offsets;
+        sf.Index    = CurrentFrame;
+        sf.Fp       = fp;
+        sf.OldPc    = oldpc;
+        sf.RegStart = regStart;
+        sf.RegEnd   = regEnd;
 
         Frames[CurrentFrame] = sf;
 
-        return CurrentFrame;
+        if (regEnd >= RegistersCount) {
+            Err.Push("Registers overflow");
+            return Frames[0];
+        }
+
+        return sf;
     }
 
     public static StackFrame PopStackFrame() {
         var sf = Frames[CurrentFrame];
-
         CurrentFrame -= 1;
-        return sf;
+
+        StackCurrent = sf.Fp;
+        return Frames[CurrentFrame];
     }
 
     public static ref StackFrame GetCurrentStackFrame() {
         return ref Frames[CurrentFrame];
     }
 
-    public static void FreeStackFrame(StackFrame sf) {
-        ListPool<ushort>.Release(sf.Offsets);
+    public static ref Register GetRegister(uint index) {
+        ref var sf = ref GetCurrentStackFrame();
+        return ref Registers[sf.RegStart + index];
     }
 
     public static Opcode ReadCode(byte[] bytes, ref uint ptr) {
@@ -311,6 +291,14 @@ public static unsafe class SLVM {
         var i = Readu64(bytes, ref ptr);
         return *(double*)&i;
     }
+
+    // public static void StackPush(Register v) {
+    //     Registers[StackCurrent++] = v;
+    // }
+
+    // public static Register StackPop() {
+    //     return Registers[--StackCurrent];
+    // }
 
     public static void StackPush(float f) {
         if (StackCurrent + 4 >= StackSize) {
@@ -548,41 +536,6 @@ public static unsafe class SLVM {
         return *(double*)&i;
     }
 
-    public static void StackSetLocal(byte index) {
-        ref var sf      = ref GetCurrentStackFrame();
-        var offset      = sf.Offsets[index];
-        var size        = offset;
-
-        if (index == 0) {
-            offset = 0;
-        } else {
-            size   -= sf.Offsets[index - 1];
-            offset -= size;
-        }
-
-        var start = sf.Fp + offset;
-
-        StackSet(StackCurrent - size, start, size);
-        StackCurrent -= size;
-    }
-
-    public static void StackPushLocal(byte index) {
-        ref var sf      = ref GetCurrentStackFrame();
-        var offset      = sf.Offsets[index];
-        var size        = offset;
-
-        if (index == 0) {
-            offset = 0;
-        } else {
-            size   -= sf.Offsets[index - 1];
-            offset -= size;
-        }
-
-        var start = sf.Fp + offset;
-
-        StackPush(start, size);
-    }
-
     public static void StackSet(uint from, uint to, uint size) {
         for (uint i = 0; i < size; ++i) {
             Stack[to + i] = Stack[from + i];
@@ -724,58 +677,45 @@ public static unsafe class SLVM {
             switch (opcode) {
                 case func : {
                     sb.Append(".func");
-                    var argsCount = Readu8(bytes, ref pc);
+                    var regCount = Readu16(bytes, ref pc);
                     sb.Append(' ');
-                    sb.Append(argsCount.ToString());
-                    var offsetsCount = Readu8(bytes, ref pc);
-                    sb.Append(' ');
-                    sb.Append(offsetsCount.ToString());
-                    var retSize = Readu32(bytes, ref pc);
-                    sb.Append(' ');
-                    sb.Append(retSize.ToString());
-
-                    for (int i = 0; i < offsetsCount; ++i) {
-                        sb.Append(' ');
-                        sb.Append(Readu16(bytes, ref pc));
-                    }
+                    sb.Append(regCount.ToString());
                 } break;
                 case call : {
-                    sb.Append("call ");
-                    var index = Reads32(bytes, ref pc);
+                    sb.Append(opcode.ToString());
+                    sb.Append(' ');
+                    var index = Readu32(bytes, ref pc);
                     sb.Append(index.ToString());
+                    sb.Append(' ');
+                    var argReg = Readu16(bytes, ref pc);
+                    sb.Append(argReg.ToString());
                 } break;
-                case add_s32 : {
+                case add : {
                     sb.Append(opcode.ToString());
+                    sb.Append(' ');
+                    var dest = Readu16(bytes, ref pc);
+                    var r0   = Readu16(bytes, ref pc);
+                    var r1   = Readu16(bytes, ref pc);
+                    sb.Append(dest.ToString());
+                    sb.Append(' ');
+                    sb.Append(r0.ToString());
+                    sb.Append(' ');
+                    sb.Append(r1.ToString());
                 } break;
-                case sub_s32 : {
+                case set_s32 : {
                     sb.Append(opcode.ToString());
+                    sb.Append(' ');
+                    var reg      = Readu16(bytes, ref pc);
+                    var constant = Reads32(bytes, ref pc);
+                    sb.Append(reg.ToString());
+                    sb.Append(' ');
+                    sb.Append(constant.ToString());
                 } break;
                 case ret : {
                     sb.Append(opcode.ToString());
-                } break;
-                case push_s32 : {
-                    sb.Append(opcode.ToString());
                     sb.Append(' ');
-                    var val = Reads32(bytes, ref pc);
-                    sb.Append(val.ToString());
-                } break;
-                case push_size : {
-                    sb.Append(opcode.ToString());
-                    sb.Append(' ');
-                    var val = Reads32(bytes, ref pc);
-                    sb.Append(val.ToString());
-                } break;
-                case llocal : {
-                    sb.Append(opcode.ToString());
-                    sb.Append(' ');
-                    var index = Readu8(bytes, ref pc);
-                    sb.Append(index.ToString());
-                } break;
-                case slocal : {
-                    sb.Append(opcode.ToString());
-                    sb.Append(' ');
-                    var index = Readu8(bytes, ref pc);
-                    sb.Append(index.ToString());
+                    var reg = Readu16(bytes, ref pc);
+                    sb.Append(reg.ToString());
                 } break;
                 default : {
                     sb.Append("Unknown operation");

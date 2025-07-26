@@ -3,7 +3,6 @@ using System.IO;
 using System.Text;
 
 using static TokenType;
-using static AstParser;
 using static Opcode;
 using static Context;
 
@@ -66,23 +65,19 @@ public static class Tests {
         cu.Push(0);
         cu.Push(2);
         cu.Push(0);
-        var firstFun = cu.PushFunction(2, 4, 4, 4);
+        var firstFun = cu.PushFunction(2);
         cu.SetFunctionPos(1, firstFun);
-        cu.Pushllocal(0);
-        cu.Pushllocal(1);
-        cu.Push(add_s32);
-        cu.Push(ret);
-        var secondFun = cu.PushFunction(2, 4, 4, 4);
+        cu.PushAdd(0, 0, 1);
+        cu.PushReturn(0);
+        var secondFun = cu.PushFunction(2);
         cu.SetFunctionPos(2, secondFun);
-        cu.Pushllocal(0);
-        cu.Pushllocal(1);
-        cu.PushCall(1);
-        cu.Push(ret);
-        cu.PushMain();
-        cu.Push(push_s32, 10);
-        cu.Push(push_s32, 5);
-        cu.PushCall(2);
-        cu.Push(ret);
+        cu.PushCall(1, 0);
+        cu.PushReturn(0);
+        cu.PushMain(2);
+        cu.Pushset_s32(0, 10);
+        cu.Pushset_s32(1, 5);
+        cu.PushCall(2, 0);
+        cu.PushReturn(0);
 
         if (File.Exists($"{directory}/Test.cu")) {
             File.Delete($"{directory}/Test.cu");

@@ -7,8 +7,8 @@ using UnityEngine;
 using TMPro;
 #endif
 
-using static TokenType;
-using static AstParser;
+// using static TokenType;
+// using static AstParser;
 using static Opcode;
 using static Tests;
 
@@ -30,34 +30,9 @@ public static class Program {
         var err       = new ErrorStream();
         Context.Init(err);
         var sb        = new StringBuilder();
-        var lexer     = new Lexer(text);
-        var ast       = AstParser.Parse(lexer);
-        SLVM.Init();
+        // var ast       = AstParser.Parse(lexer);
+        // SLVM.Init();
 
-        // var token = lexer.EatToken();
-
-        // while (token.Type != TokenType.EndOfFile) {
-        //     if (token.Type == 0)       break;
-        //     if (token.Type == Unknown) break;
-
-        //     sb.Append($"{token.Type}, ");
-        //     if (token.Type == IntLiteral) {
-        //         sb.Append($"{token.LiteralValue.IntValue} ");
-        //     } else if (token.Type == FloatLiteral) {
-        //         sb.Append($"{token.LiteralValue.FloatValue} ");
-        //     } else if (token.Type == DoubleLiteral) {
-        //         sb.Append($"{token.LiteralValue.DoubleValue} ");
-        //     } else if (token.Type == StringLiteral) {
-        //         sb.Append($"{token.StringValue} ");
-        //     } else if (token.Type == Ident) {
-        //         sb.Append($"{token.StringValue} ");
-        //     }
-
-        //     sb.Append($"{token.Line}:{token.Column}");
-        //     sb.Append('\n');
-
-        //     token = lexer.EatToken();
-        // }
         var ok = Tests.RunAllTests();
 
         if (ok != TestResult.OK) {
@@ -70,56 +45,55 @@ public static class Program {
             return;
         }
 
-        foreach(var node in ast.Typedefs) {
-            var indent = 0;
-            node.Draw(sb, ref indent);
-            sb.Append('\n', 1);
-        }
+        // foreach(var node in ast.Typedefs) {
+        //     var indent = 0;
+        //     node.Draw(sb, ref indent);
+        //     sb.Append('\n', 1);
+        // }
 
-        sb.Append('\n', 3);
+        // sb.Append('\n', 3);
 
-        foreach(var node in ast.Functions) {
-            var indent = 0;
-            node.Draw(sb, ref indent);
-            sb.Append('\n', 1);
-        }
+        // foreach(var node in ast.Functions) {
+        //     var indent = 0;
+        //     node.Draw(sb, ref indent);
+        //     sb.Append('\n', 1);
+        // }
 
-        sb.Append('\n', 3);
+        // sb.Append('\n', 3);
 
-        foreach(var node in ast.Nodes) {
-            var indent = 0;
-            node.Draw(sb, ref indent);
-            sb.Append('\n', 3);
-        }
+        // foreach(var node in ast.Nodes) {
+        //     var indent = 0;
+        //     node.Draw(sb, ref indent);
+        //     sb.Append('\n', 3);
+        // }
 
-        Print(sb.ToString());
+        // Print(sb.ToString());
 
-        var cu = BytecodeConverter.AstToBytecode(ast);
+        // var cu = BytecodeConverter.AstToBytecode(ast);
 
-        if(err.Count > 0) {
-            Print(err.ToString());
-            return;
-        }
+        // if(err.Count > 0) {
+        //     Print(err.ToString());
+        //     return;
+        // }
 
-        var bytecode = SLVM.BytecodeToString(cu.Bytes, cu.Count);
+        // var bytecode = SLVM.BytecodeToString(cu.Bytes, cu.Count);
 
-        if(err.Count > 0) {
-            Print(err.ToString());
-            return;
-        }
+        // if(err.Count > 0) {
+        //     Print(err.ToString());
+        //     return;
+        // }
 
-        Print(bytecode);
+        // Print(bytecode);
 
-        var run = SLVM.Run(cu);
+        // var run = SLVM.Run(cu);
 
-        if(err.Count > 0) {
-            Print(err.ToString());
-            return;
-        }
+        // if(err.Count > 0) {
+        //     Print(err.ToString());
+        //     return;
+        // }
 
-        Print(run.ToString());
-        Print(SLVM.StackCurrent.ToString());
-
+        // Print(run.ToString());
+        // Print(SLVM.StackCurrent.ToString());
     }
 
     private static void Print(string str) {
