@@ -33,6 +33,8 @@ public class AstNode {
     public AstNode       Left;
     public AstNode       Right;
     public TypeInfo      TypeInfo;
+    public uint          Line; // @Incomplete fill this fields
+    public uint          Column;
     public List<AstNode> Args;
     public List<AstNode> Body;
 

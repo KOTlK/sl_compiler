@@ -124,45 +124,44 @@ public static class BytecodeConverter {
         return cu;
     }
 
-    private static void ExpressionToBytecode(ushort reg, ushort addReg, CodeUnit cu, AstNode expr, Dictionary<string, ushort> vars) {
+    private static ushort ExpressionToBytecode(ushort result, ushort addReg, CodeUnit cu, AstNode expr, Dictionary<string, ushort> vars) {
         switch(expr.Type) {
             case Operator : {
-                ushort a = addReg;
-                ExpressionToBytecode(a, (ushort)(addReg + 1), cu, expr.Left, vars);
-                var b = (ushort)(addReg + 1); // fuck you
-                ExpressionToBytecode(b, (ushort)(addReg + 2), cu, expr.Right, vars);
+                // addReg + 1 = int, while addReg is ushort. FUCK YOU.
+                var a = ExpressionToBytecode(addReg, (ushort)(addReg + 1), cu, expr.Left, vars);
+                var b = ExpressionToBytecode((ushort)(addReg + 1), (ushort)(addReg + 2), cu, expr.Right, vars);
 
                 // @Incomplete
                 switch(expr.OperatorType) {
-                    case TokenType.Plus : {
-                        cu.PushMath(add, 0, reg, a, b);
-                    } break;
-                    case TokenType.Minus : {
-                        cu.PushMath(sub, 0, reg, a, b);
-                    } break;
-                    case TokenType.Mul : {
-                        cu.PushMath(mul, 0, reg, a, b);
-                    } break;
-                    case TokenType.Div : {
-                        cu.PushMath(div, 0, reg, a, b);
-                    } break;
-                    case TokenType.Mod : {
-                        cu.PushMath(mod, 0, reg, a, b);
-                    } break;
+                    case TokenType.Plus :
+                        cu.PushMath(add, 0, result, a, b);
+                        break;
+                    case TokenType.Minus :
+                        cu.PushMath(sub, 0, result, a, b);
+                        break;
+                    case TokenType.Mul :
+                        cu.PushMath(mul, 0, result, a, b);
+                        break;
+                    case TokenType.Div :
+                        cu.PushMath(div, 0, result, a, b);
+                        break;
+                    case TokenType.Mod :
+                        cu.PushMath(mod, 0, result, a, b);
+                        break;
                 }
             } break;
             case IntLiteral : {
-                cu.Pushset_s32(reg, (int)expr.Number.IntValue);
+                cu.Pushset_s32(result, (int)expr.Number.IntValue);
             } break;
             case Ident : {
                 if (vars.ContainsKey(expr.String)) {
-                    var v = vars[expr.String];
-
-                    if (v != reg) {
-                        cu.PushMov(reg, v);
-                    }
+                    return vars[expr.String];
+                } else {
+                    Err.Push("Undeclared identifier % at %:%", expr.String, expr.Line, expr.Column);
                 }
             } break;
         }
+
+        return result;
     }
 }

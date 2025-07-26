@@ -29,8 +29,6 @@ public static class Tests {
     };
 
     public static TestResult RunAllTests() {
-        var err = new ErrorStream();
-        Context.Init(err);
         var result = TestResult.OK;
 
         foreach (var test in AllTests) {
