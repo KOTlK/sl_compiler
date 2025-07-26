@@ -67,7 +67,7 @@ public static class Tests {
         cu.Push(0);
         var firstFun = cu.PushFunction(2, 2);
         cu.SetFunctionPos(1, firstFun);
-        cu.PushAdd(add_s32, 0, 0, 1);
+        cu.PushMath(add, 0, 0, 0, 1);
         cu.PushReturn(0);
         var secondFun = cu.PushFunction(2, 2);
         cu.SetFunctionPos(2, secondFun);

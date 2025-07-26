@@ -55,8 +55,9 @@ public unsafe class CodeUnit {
         Push(val);
     }
 
-    public void PushAdd(Opcode code, ushort dest, ushort a, ushort b) {
-        Push(code);
+    public void PushMath(Opcode instr, byte regType, ushort dest, ushort a, ushort b) {
+        Push(instr);
+        Push(regType);
         Push(dest);
         Push(a);
         Push(b);

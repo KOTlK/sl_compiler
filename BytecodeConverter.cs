@@ -135,19 +135,19 @@ public static class BytecodeConverter {
                 // @Incomplete
                 switch(expr.OperatorType) {
                     case TokenType.Plus : {
-                        cu.PushAdd(add_s32, reg, a, b);
+                        cu.PushMath(add, 0, reg, a, b);
                     } break;
                     case TokenType.Minus : {
-                        cu.PushAdd(sub_s32, reg, a, b);
+                        cu.PushMath(sub, 0, reg, a, b);
                     } break;
                     case TokenType.Mul : {
-                        cu.PushAdd(mul_s32, reg, a, b);
+                        cu.PushMath(mul, 0, reg, a, b);
                     } break;
                     case TokenType.Div : {
-                        cu.PushAdd(div_s32, reg, a, b);
+                        cu.PushMath(div, 0, reg, a, b);
                     } break;
                     case TokenType.Mod : {
-                        cu.PushAdd(mod_s32, reg, a, b);
+                        cu.PushMath(mod, 0, reg, a, b);
                     } break;
                 }
             } break;

@@ -9,17 +9,24 @@ public enum Opcode : ushort {
     fset64   ,
     // mov dest src                 |   move src register to dest
     mov      ,
-    // add dest a b                 |   add 2 32-bit integers and put the result into dest
-    add_s32  ,
-    add_u32  ,
-    add_s64  ,
-    add_u64  ,
+    // add dest a b                 |   add 2 integers and put the result to dest
+    // add regType dest a b         |   regType: 0 - 32-bit signed   integer
+    //                                           1 - 32-bit unsigned integer
+    //                                           2 - 64-bit signed   integer
+    //                                           3 - 64-bit unsigned integer
+    add      ,
+    // fadd regType dest a b        |   add 2 floats and put the result to dest
+    //                                  regType: 0 - 32-bit float
+    //                                           1 - 64-bit float
+    sub      ,
+    mul      ,
+    div      ,
+    mod      ,
     fadd     ,
-    fadd64   ,
-    sub_s32  ,
-    mul_s32  ,
-    div_s32  ,
-    mod_s32  ,
+    fsub     ,
+    fmul     ,
+    fdiv     ,
+    fmod     , // (C)
     // .func regCount argCount      |   function declaration.
     func     ,
     // call funIndex                |   call function
