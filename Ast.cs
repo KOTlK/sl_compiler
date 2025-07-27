@@ -676,7 +676,7 @@ public static class AstParser {
 
     private static bool AssertSymbol(Token token, TokenType type) {
         if (token.Type != type) {
-            Err.UnexpectedSymbol(token.Line, token.Column, type, token.Type);
+            UnexpectedSymbol(token.Line, token.Column, type, token.Type);
             return true;
         }
 
@@ -712,5 +712,9 @@ public static class AstParser {
         Err.Push(AssertSb.ToString());
 
         return true;
+    }
+
+    private static void UnexpectedSymbol(int line, int column, TokenType expected, TokenType got) {
+        Err.Push($"unexpected symbol at {line}:{column}. Expected {expected}, got {got}");
     }
 }

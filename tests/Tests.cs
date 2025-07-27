@@ -26,7 +26,22 @@ public static class Tests {
 
     public static Test[] AllTests = new Test[] {
         new Test (nameof(BytecodeFuncall), BytecodeFuncall),
+        new Test (nameof(BytecodeIf), BytecodeIf),
     };
+
+    private static string TestsDirectory = $"{AppDomain.CurrentDomain.BaseDirectory}";
+
+    public static void Main() {
+        var err       = new ErrorStream();
+        Context.Init(err);
+
+        var ok = RunAllTests();
+
+        if (ok != TestResult.OK) {
+            Console.WriteLine(err.ToString());
+            return;
+        }
+    }
 
     public static TestResult RunAllTests() {
         var result = TestResult.OK;
@@ -50,11 +65,6 @@ public static class Tests {
     }
 
     public static TestResult BytecodeFuncall() {
- #if UNITY_EDITOR || UNITY_STANDALONE
-        var directory = $"{Application.streamingAssetsPath}";
-#else
-        var directory  = $"{AppDomain.CurrentDomain.BaseDirectory}";
-#endif
         var cu  = new CodeUnit(256);
         cu.Push(3);
         cu.Push(0);
@@ -77,18 +87,18 @@ public static class Tests {
         cu.PushCall(2);
         cu.PushReturn(0);
 
-        if (File.Exists($"{directory}/Test.cu")) {
-            File.Delete($"{directory}/Test.cu");
+        if (File.Exists($"{TestsDirectory}/{nameof(BytecodeFuncall)}.cu")) {
+            File.Delete($"{TestsDirectory}/{nameof(BytecodeFuncall)}.cu");
         }
 
-        var f = File.Create($"{directory}/Test.cu");
+        var f = File.Create($"{TestsDirectory}/{nameof(BytecodeFuncall)}.cu");
         f.Write(cu.Bytes, 0, (int)cu.Count);
         f.Close();
 
         SLVM.Init();
 
         Console.WriteLine(SLVM.BytecodeToString(cu.Bytes, cu.Count));
-        var r = SLVM.Run(cu);
+        var r = SLVM.Run(cu.Bytes);
 
         if (r != 15) {
             Console.WriteLine($"The result is wrong, should be 15, but got {r.ToString()}");
@@ -101,5 +111,11 @@ public static class Tests {
         }
 
         return TestResult.OK;
+    }
+
+    public static TestResult BytecodeIf() {
+        var result = TestResult.OK;
+
+        return result;
     }
 }

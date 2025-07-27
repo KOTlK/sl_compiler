@@ -10,7 +10,6 @@ using TMPro;
 // using static TokenType;
 // using static AstParser;
 using static Opcode;
-using static Tests;
 
 #if UNITY_EDITOR || UNITY_STANDALONE
 public class Main : MonoBehaviour {
@@ -29,22 +28,16 @@ public static class Program {
         var text      = File.ReadAllText(path);
         var err       = new ErrorStream();
         Context.Init(err);
-        var sb        = new StringBuilder();
+        // var sb        = new StringBuilder();
         var lexer     = new Lexer(text);
         var ast       = AstParser.Parse(lexer);
-        SLVM.Init();
-
-        var ok = Tests.RunAllTests();
-
-        if (ok != TestResult.OK) {
-            Print(err.ToString());
-            return;
-        }
 
         if(err.Count > 0) {
             Print(err.ToString());
             return;
         }
+
+        SLVM.Init();
 
         // foreach(var node in ast.Typedefs) {
         //     var indent = 0;
@@ -86,7 +79,7 @@ public static class Program {
 
         Print(bytecode);
 
-        var run = SLVM.Run(cu);
+        var run = SLVM.Run(cu.Bytes);
 
         if(err.Count > 0) {
             Print(err.ToString());

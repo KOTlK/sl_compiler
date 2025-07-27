@@ -33,11 +33,10 @@ public static unsafe class SLVM {
         CurrentFrame = -1;
     }
 
-    public static int Run(CodeUnit exe) {
+    public static int Run(byte[] bytes) {
         StackCurrent = 0;
 		CurrentFrame = -1;
-        var  bytes = exe.Bytes;
-        var  count = exe.Count;
+        var  count = bytes.Length;
         uint pc    = 0;
         Readu32(bytes, ref pc);
 
