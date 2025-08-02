@@ -65,14 +65,7 @@ public static class Tests {
     }
 
     public static TestResult BytecodeFuncall() {
-        var cu  = new CodeUnit(256);
-        cu.Push(3);
-        cu.Push(0);
-        cu.Push(0);
-        cu.Push(1);
-        cu.Push(0);
-        cu.Push(2);
-        cu.Push(0);
+        var cu  = new CodeUnit(256, 3, 0);
         var firstFun = cu.PushFunction(2, 2);
         cu.SetFunctionPos(1, firstFun);
         cu.PushMath(add, 0, 0, 0, 1);
@@ -115,6 +108,35 @@ public static class Tests {
 
     public static TestResult BytecodeIf() {
         var result = TestResult.OK;
+        var cu     = new CodeUnit(256, 1, 1);
+        var main = cu.PushMain(2);
+        cu.SetFunctionPos(0, main);
+        cu.Pushset_s32(0, 10);
+        cu.Pushset_s32(1, 11);
+        cu.PushCmp(RegType.s32, 0, 1);
+        cu.PushJumpIf(jl, 0);
+        cu.PushReturn(0);
+        var labelPos = cu.Count;
+        cu.SetLabelPos(0, labelPos);
+        cu.PushReturn(1);
+
+        if (File.Exists($"{TestsDirectory}/{nameof(BytecodeIf)}.cu")) {
+            File.Delete($"{TestsDirectory}/{nameof(BytecodeIf)}.cu");
+        }
+
+        var f = File.Create($"{TestsDirectory}/{nameof(BytecodeIf)}.cu");
+        f.Write(cu.Bytes, 0, (int)cu.Count);
+        f.Close();
+
+        SLVM.Init();
+
+        Console.WriteLine(SLVM.BytecodeToString(cu.Bytes, cu.Count));
+        var r = SLVM.Run(cu.Bytes);
+
+        if (r != 11) {
+            result = TestResult.NOTOK;
+            return result;
+        }
 
         return result;
     }

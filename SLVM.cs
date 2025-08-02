@@ -16,12 +16,25 @@ public struct StackFrame {
     public uint Fp;
 }
 
+public enum Flags : uint {
+    Uninitialized = 0,
+    Zero = 0x1,
+    GT   = 0x2,
+    LT   = 0x4,
+    EQ   = 0x8,
+}
+
 public static unsafe class SLVM {
     public static Register[]        Registers;
     public static byte[]            Stack;
     public static StackFrame[]      Frames;
     public static uint              StackCurrent;
     public static int               CurrentFrame;
+
+    public static uint[]            FunctionTable;
+    public static uint[]            LabelTable;
+
+    public static Flags FLAGS;
 
     private const int MaxFrames = 4096;
 
@@ -49,7 +62,25 @@ public static unsafe class SLVM {
             return 1;
         }
 
-        uint main = GetFunctionByIndex(bytes, 0);
+        var funCount = Readu32(bytes, ref pc);
+        FunctionTable = new uint[funCount];
+        for (var i = 0; i < funCount; ++i) {
+            var index = Readu32(bytes, ref pc);
+            var pos   = Readu32(bytes, ref pc);
+
+            FunctionTable[index] = pos;
+        }
+
+        var labelCount = Readu32(bytes, ref pc);
+        LabelTable = new uint[labelCount];
+        for (var i = 0; i < labelCount; ++i) {
+            var index = Readu32(bytes, ref pc);
+            var pos   = Readu32(bytes, ref pc);
+
+            LabelTable[index] = pos;
+        }
+
+        uint main = GetFunctionByIndex(0);
 		pc = main;
 		var mainRegCount  = Readu16(bytes, ref pc);
 		Readu16(bytes, ref pc); // dont need args count
@@ -60,11 +91,218 @@ public static unsafe class SLVM {
             var opcode = ReadCode(bytes, ref pc);
 
             switch (opcode) {
-                case func : {
+                case func  : break;
+                case set : {
+                    var regType = (RegType)Readu8(bytes, ref pc);
+                    var dest    = Readu16(bytes, ref pc);
+                    ref var reg = ref GetRegister(dest);
+
+                    switch(regType) {
+                        case RegType.s32 :
+                            // reg.Type = RegisterType.s32;
+                            reg.s32  = Reads32(bytes, ref pc);
+                            break;
+                        case RegType.u32:
+                            // reg.Type = RegisterType.u32;
+                            reg.u32  = Readu32(bytes, ref pc);
+                            break;
+                        case RegType.s64 :
+                            // reg.Type = RegisterType.s64;
+                            reg.s64  = Reads64(bytes, ref pc);
+                            break;
+                        case RegType.u64 :
+                            // reg.Type = RegisterType.u64;
+                            reg.u64  = Readu64(bytes, ref pc);
+                            break;
+                        case RegType.Float :
+                            // reg.Type  = RegisterType.Float;
+                            reg.Float = ReadFloat(bytes, ref pc);
+                            break;
+                        case RegType.Double :
+                            // reg.Type   = RegisterType.Double;
+                            reg.Double = ReadDouble(bytes, ref pc);
+                            break;
+                    }
+                } break;
+                case mov : {
+                    var reg = Readu16(bytes, ref pc);
+                    ref var src  = ref GetRegister(Readu16(bytes, ref pc));
+
+                    Registers[reg] = src;
+                } break;
+                case add : {
+                    // Garbage in - garbage out
+                    var regType  = (RegType)Readu8(bytes, ref pc);
+                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
+
+                    switch(regType) {
+                        case RegType.s32 : {
+                            dest.s32 = a.s32 + b.s32;
+                            break;
+                        }
+                        case RegType.u32 : {
+                            dest.u32 = a.u32 + b.u32;
+                            break;
+                        }
+                        case RegType.s64 : {
+                            dest.s64 = a.s64 + b.s64;
+                            break;
+                        }
+                        case RegType.u64 : {
+                            dest.u64 = a.u64 + b.u64;
+                            break;
+                        }
+                        case RegType.Float : {
+                            dest.Float = a.Float + b.Float;
+                            break;
+                        }
+                        case RegType.Double : {
+                            dest.Double = a.Double + b.Double;
+                            break;
+                        }
+                    }
+                } break;
+                case sub : {
+                    // Garbage in - garbage out
+                    var regType  = (RegType)Readu8(bytes, ref pc);
+                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
+
+                    switch(regType) {
+                        case RegType.s32 : {
+                            dest.s32 = a.s32 - b.s32;
+                            break;
+                        }
+                        case RegType.u32 : {
+                            dest.u32 = a.u32 - b.u32;
+                            break;
+                        }
+                        case RegType.s64 : {
+                            dest.s64 = a.s64 - b.s64;
+                            break;
+                        }
+                        case RegType.u64 : {
+                            dest.u64 = a.u64 - b.u64;
+                            break;
+                        }
+                        case RegType.Float : {
+                            dest.Float = a.Float - b.Float;
+                            break;
+                        }
+                        case RegType.Double : {
+                            dest.Double = a.Double - b.Double;
+                            break;
+                        }
+                    }
+                } break;
+                case mul : {
+                    // Garbage in - garbage out
+                    var regType  = (RegType)Readu8(bytes, ref pc);
+                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
+
+                    switch(regType) {
+                        case RegType.s32 : {
+                            dest.s32 = a.s32 * b.s32;
+                            break;
+                        }
+                        case RegType.u32 : {
+                            dest.u32 = a.u32 * b.u32;
+                            break;
+                        }
+                        case RegType.s64 : {
+                            dest.s64 = a.s64 * b.s64;
+                            break;
+                        }
+                        case RegType.u64 : {
+                            dest.u64 = a.u64 * b.u64;
+                            break;
+                        }
+                        case RegType.Float : {
+                            dest.Float = a.Float * b.Float;
+                            break;
+                        }
+                        case RegType.Double : {
+                            dest.Double = a.Double * b.Double;
+                            break;
+                        }
+                    }
+                } break;
+                case div : {
+                    // Garbage in - garbage out
+                    var regType  = (RegType)Readu8(bytes, ref pc);
+                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
+
+                    switch(regType) {
+                        case RegType.s32 : {
+                            dest.s32 = a.s32 / b.s32;
+                            break;
+                        }
+                        case RegType.u32 : {
+                            dest.u32 = a.u32 / b.u32;
+                            break;
+                        }
+                        case RegType.s64 : {
+                            dest.s64 = a.s64 / b.s64;
+                            break;
+                        }
+                        case RegType.u64 : {
+                            dest.u64 = a.u64 / b.u64;
+                            break;
+                        }
+                        case RegType.Float : {
+                            dest.Float = a.Float / b.Float;
+                            break;
+                        }
+                        case RegType.Double : {
+                            dest.Double = a.Double / b.Double;
+                            break;
+                        }
+                    }
+                } break;
+                case mod : {
+                    // Garbage in - garbage out
+                    var regType  = (RegType)Readu8(bytes, ref pc);
+                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
+                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
+
+                    switch(regType) {
+                        case RegType.s32 : {
+                            dest.s32 = a.s32 % b.s32;
+                            break;
+                        }
+                        case RegType.u32 : {
+                            dest.u32 = a.u32 % b.u32;
+                            break;
+                        }
+                        case RegType.s64 : {
+                            dest.s64 = a.s64 % b.s64;
+                            break;
+                        }
+                        case RegType.u64 : {
+                            dest.u64 = a.u64 % b.u64;
+                            break;
+                        }
+                        case RegType.Float : {
+                            dest.Float = a.Float % b.Float;
+                            break;
+                        }
+                        case RegType.Double : {
+                            dest.Double = a.Double % b.Double;
+                            break;
+                        }
+                    }
                 } break;
                 case call : {
                     var index     = Readu32(bytes, ref pc);
-                    var newPc     = GetFunctionByIndex(bytes, index);
+                    var newPc     = GetFunctionByIndex(index);
                     var oldPc     = pc;
                     pc = newPc;
                     var regCount  = Readu16(bytes, ref pc);
@@ -73,226 +311,6 @@ public static unsafe class SLVM {
                     var regEnd    = regStart + regCount - 1;
 
                     sf = PushStackFrame(StackCurrent, oldPc, regStart, regEnd);
-                } break;
-                case add : {
-                    // Garbage in - garbage out
-                    var regType  = Readu8(bytes, ref pc);
-                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
-
-                    switch(regType) {
-                        case 0 : {
-                            dest.s32 = a.s32 + b.s32;
-                            break;
-                        }
-                        case 1 : {
-                            dest.u32 = a.u32 + b.u32;
-                            break;
-                        }
-                        case 2 : {
-                            dest.s64 = a.s64 + b.s64;
-                            break;
-                        }
-                        case 3 : {
-                            dest.u64 = a.u64 + b.u64;
-                            break;
-                        }
-                    }
-                } break;
-                case sub : {
-                    // Garbage in - garbage out
-                    var regType  = Readu8(bytes, ref pc);
-                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
-
-                    switch(regType) {
-                        case 0 : {
-                            dest.s32 = a.s32 - b.s32;
-                            break;
-                        }
-                        case 1 : {
-                            dest.u32 = a.u32 - b.u32;
-                            break;
-                        }
-                        case 2 : {
-                            dest.s64 = a.s64 - b.s64;
-                            break;
-                        }
-                        case 3 : {
-                            dest.u64 = a.u64 - b.u64;
-                            break;
-                        }
-                    }
-                } break;
-                case mul : {
-                    // Garbage in - garbage out
-                    var regType  = Readu8(bytes, ref pc);
-                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
-
-                    switch(regType) {
-                        case 0 : {
-                            dest.s32 = a.s32 * b.s32;
-                            break;
-                        }
-                        case 1 : {
-                            dest.u32 = a.u32 * b.u32;
-                            break;
-                        }
-                        case 2 : {
-                            dest.s64 = a.s64 * b.s64;
-                            break;
-                        }
-                        case 3 : {
-                            dest.u64 = a.u64 * b.u64;
-                            break;
-                        }
-                    }
-                } break;
-                case div : {
-                    // Garbage in - garbage out
-                    var regType  = Readu8(bytes, ref pc);
-                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
-
-                    switch(regType) {
-                        case 0 : {
-                            dest.s32 = a.s32 / b.s32;
-                            break;
-                        }
-                        case 1 : {
-                            dest.u32 = a.u32 / b.u32;
-                            break;
-                        }
-                        case 2 : {
-                            dest.s64 = a.s64 / b.s64;
-                            break;
-                        }
-                        case 3 : {
-                            dest.u64 = a.u64 / b.u64;
-                            break;
-                        }
-                    }
-                } break;
-                case mod : {
-                    // Garbage in - garbage out
-                    var regType  = Readu8(bytes, ref pc);
-                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
-
-                    switch(regType) {
-                        case 0 : {
-                            dest.s32 = a.s32 % b.s32;
-                            break;
-                        }
-                        case 1 : {
-                            dest.u32 = a.u32 % b.u32;
-                            break;
-                        }
-                        case 2 : {
-                            dest.s64 = a.s64 % b.s64;
-                            break;
-                        }
-                        case 3 : {
-                            dest.u64 = a.u64 % b.u64;
-                            break;
-                        }
-                    }
-                } break;
-                case fadd : {
-                    // Garbage in - garbage out
-                    var regType  = Readu8(bytes, ref pc);
-                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
-
-                    switch(regType) {
-                        case 0 : {
-                            dest.Float = a.Float + b.Float;
-                            break;
-                        }
-                        case 1 : {
-                            dest.Double = a.Double + b.Double;
-                            break;
-                        }
-                    }
-                } break;
-                case fsub : {
-                    // Garbage in - garbage out
-                    var regType  = Readu8(bytes, ref pc);
-                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
-
-                    switch(regType) {
-                        case 0 : {
-                            dest.Float = a.Float - b.Float;
-                            break;
-                        }
-                        case 1 : {
-                            dest.Double = a.Double - b.Double;
-                            break;
-                        }
-                    }
-                } break;
-                case fmul : {
-                    // Garbage in - garbage out
-                    var regType  = Readu8(bytes, ref pc);
-                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
-
-                    switch(regType) {
-                        case 0 : {
-                            dest.Float = a.Float * b.Float;
-                            break;
-                        }
-                        case 1 : {
-                            dest.Double = a.Double * b.Double;
-                            break;
-                        }
-                    }
-                } break;
-                case fdiv : {
-                    // Garbage in - garbage out
-                    var regType  = Readu8(bytes, ref pc);
-                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
-
-                    switch(regType) {
-                        case 0 : {
-                            dest.Float = a.Float / b.Float;
-                            break;
-                        }
-                        case 1 : {
-                            dest.Double = a.Double / b.Double;
-                            break;
-                        }
-                    }
-                } break;
-                case fmod : { // (C)
-                    // Garbage in - garbage out
-                    var regType  = Readu8(bytes, ref pc);
-                    ref var dest = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var a    = ref GetRegister(Readu16(bytes, ref pc));
-                    ref var b    = ref GetRegister(Readu16(bytes, ref pc));
-
-                    switch(regType) {
-                        case 0 : {
-                            dest.Float = a.Float % b.Float;
-                            break;
-                        }
-                        case 1 : {
-                            dest.Double = a.Double % b.Double;
-                            break;
-                        }
-                    }
                 } break;
                 case ret : {
                     var regId   = Readu16(bytes, ref pc);
@@ -308,18 +326,126 @@ public static unsafe class SLVM {
 
                     sf = PopStackFrame();
                 } break;
-                case mov : {
-                    var reg = Readu16(bytes, ref pc);
-                    ref var src  = ref GetRegister(Readu16(bytes, ref pc));
+                case cmp : {
+                    var regType = (RegType)Readu8(bytes, ref pc);
+                    var r0      = Readu16(bytes, ref pc);
+                    var r1      = Readu16(bytes, ref pc);
+                    ref var reg0 = ref GetRegister(r0);
+                    ref var reg1 = ref GetRegister(r1);
+                    FLAGS = Flags.Uninitialized;
 
-                    Registers[reg] = src;
+                    switch(regType) {
+                        case RegType.s32 :
+                            var v = reg0.s32 - reg1.s32;
+                            if (v == 0) {
+                                FLAGS |= Flags.Zero;
+                                FLAGS |= Flags.EQ;
+                            } else if (v > 0) {
+                                FLAGS |= Flags.GT;
+                            } else if (v < 0) {
+                                FLAGS |= Flags.LT;
+                            }
+                            break;
+                        case RegType.u32 :
+                            var v1 = reg0.u32 - reg1.u32; // fuck you v.1
+                            if (v1 == 0) {
+                                FLAGS |= Flags.Zero;
+                                FLAGS |= Flags.EQ;
+                            } else if (v1 > 0) {
+                                FLAGS |= Flags.GT;
+                            } else if (v1 < 0) {
+                                FLAGS |= Flags.LT;
+                            }
+                            break;
+                        case RegType.s64 :
+                            var v2 = reg0.s64 - reg1.s64; // fuck you v.2
+                            if (v2 == 0) {
+                                FLAGS |= Flags.Zero;
+                                FLAGS |= Flags.EQ;
+                            } else if (v2 > 0) {
+                                FLAGS |= Flags.GT;
+                            } else if (v2 < 0) {
+                                FLAGS |= Flags.LT;
+                            }
+                            break;
+                        case RegType.u64 :
+                            var v3 = reg0.u64 - reg1.u64; // fuck you v.3
+                            if (v3 == 0) {
+                                FLAGS |= Flags.Zero;
+                                FLAGS |= Flags.EQ;
+                            } else if (v3 > 0) {
+                                FLAGS |= Flags.GT;
+                            } else if (v3 < 0) {
+                                FLAGS |= Flags.LT;
+                            }
+                            break;
+                        case RegType.Float :
+                            var v4 = reg0.Float - reg1.Float; // fuck you v.4
+                            if (v4 == 0) {
+                                FLAGS |= Flags.Zero;
+                                FLAGS |= Flags.EQ;
+                            } else if (v4 > 0) {
+                                FLAGS |= Flags.GT;
+                            } else if (v4 < 0) {
+                                FLAGS |= Flags.LT;
+                            }
+                            break;
+                        case RegType.Double :
+                            var v5 = reg0.Double - reg1.Double; // fuck you v.5
+                            if (v5 == 0) {
+                                FLAGS |= Flags.Zero;
+                                FLAGS |= Flags.EQ;
+                            } else if (v5 > 0) {
+                                FLAGS |= Flags.GT;
+                            } else if (v5 < 0) {
+                                FLAGS |= Flags.LT;
+                            }
+                            break;
+                    }
                 } break;
-                case set_s32 : {
-                    ref var reg = ref GetRegister(Readu16(bytes, ref pc));
-                    reg.Type = RegisterType.s32;
-                    reg.s32  = Reads32(bytes, ref pc);
+
+                case jmp: {
+                    var index = Readu32(bytes, ref pc);
+                    pc = GetLabelByIndex(index);
                 } break;
-                default : {
+
+                case jl: {
+                    var index     = Readu32(bytes, ref pc);
+
+                    if ((FLAGS & Flags.LT) == Flags.LT) pc = GetLabelByIndex(index);
+                } break;
+
+                case jg: {
+                    var index = Readu32(bytes, ref pc);
+
+                    if((FLAGS & Flags.GT) == Flags.GT) pc = GetLabelByIndex(index);
+                } break;
+
+                case je:{
+                    var index = Readu32(bytes, ref pc);
+
+                    if((FLAGS & Flags.Zero) == Flags.Zero) pc = GetLabelByIndex(index);
+                } break;
+
+                case jne:{
+                    var index = Readu32(bytes, ref pc);
+
+                    if((FLAGS & Flags.Zero) != Flags.Zero) pc = GetLabelByIndex(index);
+                } break;
+
+                case jz:{
+                    var index = Readu32(bytes, ref pc);
+
+                    if((FLAGS & Flags.Zero) == Flags.Zero) pc = GetLabelByIndex(index);
+                } break;
+
+                case jnz:{
+                    var index = Readu32(bytes, ref pc);
+
+                    if((FLAGS & Flags.Zero) != Flags.Zero) pc = GetLabelByIndex(index);
+                } break;
+
+                default: {
                     Err.Push("Unknown opcode at %", pc);
                     return 3;
                 }
@@ -461,12 +587,12 @@ public static unsafe class SLVM {
         return i;
     }
 
-    public static float Readfloat(byte[] bytes, ref uint ptr) {
+    public static float ReadFloat(byte[] bytes, ref uint ptr) {
         var i = Readu32(bytes, ref ptr);
         return *(float*)&i;
     }
 
-    public static double Readdouble(byte[] bytes, ref uint ptr) {
+    public static double ReadDouble(byte[] bytes, ref uint ptr) {
         var i = Readu64(bytes, ref ptr);
         return *(double*)&i;
     }
@@ -736,21 +862,14 @@ public static unsafe class SLVM {
         StackCurrent += count;
     }
 
-    private static uint GetFunctionByIndex(byte[] bytes, uint index) {
-        var funCount = Readu32(bytes, FunctionsCountOffset);
-        if (index >= funCount) {
-            Err.Push("Function index % is out of range %-%", index, 0, funCount);
-            return 0;
-        }
+    private static uint GetFunctionByIndex(uint index) {
+        Assert(index < FunctionTable.Length, $"Function index {index} is out of range {FunctionTable.Length}.");
+        return FunctionTable[index];
+    }
 
-        // 8 is size of funcIndex(4B) + funPos(4B)
-        var offset = 8 * index;
-
-        Assert(Readu32(bytes, FunctionsOffset + offset) == index, $"Function indices are not identical! Trying to get {index}, got {Readu32(bytes, FunctionsOffset + offset)}");
-
-        offset += 4;
-
-        return Readu32(bytes, FunctionsOffset + offset);
+    private static uint GetLabelByIndex(uint index) {
+        Assert(index < LabelTable.Length, $"Label index {index} is out of range {LabelTable.Length}.");
+        return LabelTable[index];
     }
 
     private static long Reads64(byte[] bytes, uint ptr) {
@@ -823,12 +942,12 @@ public static unsafe class SLVM {
         return i;
     }
 
-    private static float Readfloat(byte[] bytes, uint ptr) {
+    private static float ReadFloat(byte[] bytes, uint ptr) {
         var i = Readu32(bytes, ptr);
         return *(float*)&i;
     }
 
-    private static double Readdouble(byte[] bytes, uint ptr) {
+    private static double ReadDouble(byte[] bytes, uint ptr) {
         var i = Readu64(bytes, ptr);
         return *(double*)&i;
     }
@@ -839,8 +958,27 @@ public static unsafe class SLVM {
 
         // print function table
         var funCount = Readu32(bytes, ref pc);
+        sb.Append("Functions count: ");
+        sb.Append(funCount.ToString());
+        sb.Append('\n');
 
         for (var i = 0; i < funCount; ++i) {
+            var index = Readu32(bytes, ref pc);
+            var pos   = Readu32(bytes, ref pc);
+
+            sb.Append(index);
+            sb.Append(':');
+            sb.Append(pos);
+            sb.Append('\n');
+        }
+
+        // print label table
+        var labelCount = Readu32(bytes, ref pc);
+        sb.Append("Labels count: ");
+        sb.Append(labelCount.ToString());
+        sb.Append('\n');
+
+        for (var i = 0; i < labelCount; ++i) {
             var index = Readu32(bytes, ref pc);
             var pos   = Readu32(bytes, ref pc);
 
@@ -863,6 +1001,7 @@ public static unsafe class SLVM {
                     sb.Append(' ');
                     sb.Append(argCount.ToString());
                 } break;
+
                 case call : {
                     sb.Append(opcode.ToString());
                     sb.Append(' ');
@@ -872,6 +1011,7 @@ public static unsafe class SLVM {
                     // var argReg = Readu16(bytes, ref pc);
                     // sb.Append(argReg.ToString());
                 } break;
+
                 case mov : {
                     sb.Append(opcode.ToString());
                     sb.Append(' ');
@@ -880,19 +1020,15 @@ public static unsafe class SLVM {
                     sb.Append(Readu16(bytes, ref pc).ToString());
                     sb.Append(' ');
                 } break;
+
                 case add  :
-                case fadd :
                 case sub  :
-                case fsub :
                 case mul  :
-                case fmul :
                 case div  :
-                case fdiv :
-                case mod  :
-                case fmod : { // (C)
+                case mod : {
                     sb.Append(opcode.ToString());
                     sb.Append(' ');
-                    var regType = Readu8(bytes, ref pc);
+                    var regType = (RegType)Readu8(bytes, ref pc);
                     var dest = Readu16(bytes, ref pc);
                     var r0   = Readu16(bytes, ref pc);
                     var r1   = Readu16(bytes, ref pc);
@@ -904,21 +1040,84 @@ public static unsafe class SLVM {
                     sb.Append(' ');
                     sb.Append(r1.ToString());
                 } break;
-                case set_s32 : {
+
+                case set : {
                     sb.Append(opcode.ToString());
                     sb.Append(' ');
+                    var regType  = (RegType)Readu8(bytes, ref pc);
                     var reg      = Readu16(bytes, ref pc);
-                    var constant = Reads32(bytes, ref pc);
+                    sb.Append(regType.ToString());
+                    sb.Append(' ');
                     sb.Append(reg.ToString());
                     sb.Append(' ');
-                    sb.Append(constant.ToString());
+
+                    switch(regType) {
+                        case RegType.s32 :
+                            var constant = Reads32(bytes, ref pc);
+                            sb.Append(constant.ToString());
+                            break;
+                        case RegType.u32 :
+                            var constant1 = Readu32(bytes, ref pc); // fuck microsoft
+                            sb.Append(constant1.ToString());
+                            break;
+                        case RegType.s64 :
+                            var constant2 = Reads64(bytes, ref pc); // fuck microsoft
+                            sb.Append(constant2.ToString());
+                            break;
+                        case RegType.u64 :
+                            var constant3 = Readu64(bytes, ref pc); // fuck microsoft
+                            sb.Append(constant3.ToString());
+                            break;
+                        case RegType.Float :
+                            var constant4 = ReadFloat(bytes, ref pc); // fuck microsoft
+                            sb.Append(constant4.ToString());
+                            break;
+                        case RegType.Double :
+                            var constant5 = ReadDouble(bytes, ref pc); // fuck microsoft
+                            sb.Append(constant5.ToString());
+                            break;
+                    }
                 } break;
+
                 case ret : {
                     sb.Append(opcode.ToString());
                     sb.Append(' ');
                     var reg = Readu16(bytes, ref pc);
                     sb.Append(reg.ToString());
                 } break;
+
+                case cmp : {
+                    sb.Append(opcode.ToString());
+                    sb.Append(' ');
+                    var regType = (RegType)Readu8(bytes, ref pc);
+                    var r0      = Readu16(bytes, ref pc);
+                    var r1      = Readu16(bytes, ref pc);
+                    sb.Append(regType.ToString());
+                    sb.Append(' ');
+                    sb.Append(r0.ToString());
+                    sb.Append(' ');
+                    sb.Append(r1.ToString());
+                } break;
+
+                case jmp : {
+                    sb.Append(opcode.ToString());
+                    sb.Append(' ');
+                    var pos = Readu32(bytes, ref pc);
+                    sb.Append(pos.ToString());
+                } break;
+
+                case jg  :
+                case je  :
+                case jne :
+                case jz  :
+                case jnz :
+                case jl  : {
+                    sb.Append(opcode.ToString());
+                    sb.Append(' ');
+                    var pos     = Readu32(bytes, ref pc);
+                    sb.Append(pos.ToString());
+                } break;
+
                 default : {
                     sb.Append("Unknown operation");
                     break;

@@ -1,19 +1,25 @@
 using System;
+using System.Text;
 using System.Collections.Generic;
 
 using static Opcode;
 using static BytecodeConstants;
 
 /*  Structure:
-    Keyword 4B
+    BOOBA 4B
     Functions Count 4B
     Function Table [index(4B) : position(4B)]
+    Labels Count 4B
+    Label Table [index(4B) : position(4B)]
     Code...
 */
 public unsafe class CodeUnit {
     public byte[]    Bytes;
     public uint      Count;
     public uint      Length;
+
+    public uint      FunctionsCount;
+    public uint      LabelsCount;
 
     public CodeUnit(uint length) {
         Bytes    = new byte[length];
@@ -23,6 +29,28 @@ public unsafe class CodeUnit {
         Bytes[2] = 0x00;
         Bytes[3] = 0x8A;
         Count    = 4;
+    }
+
+    public CodeUnit(uint length, uint functionsCount, uint labelsCount) {
+        Bytes    = new byte[length];
+        Length   = length;
+        Bytes[0] = 0x80;
+        Bytes[1] = 0x00;
+        Bytes[2] = 0x00;
+        Bytes[3] = 0x8A;
+        Count    = 4;
+        FunctionsCount = functionsCount;
+        LabelsCount    = labelsCount;
+        Push(functionsCount);
+        for (uint i = 0; i < functionsCount; ++i) {
+            Push(i);
+            Push((uint)0);
+        }
+        Push(labelsCount);
+        for (uint i = 0; i < labelsCount; ++i) {
+            Push(i);
+            Push((uint)0);
+        }
     }
 
     public void Push(Opcode a) {
@@ -49,13 +77,53 @@ public unsafe class CodeUnit {
         }
     }
 
+    public void Push(RegType regType) {
+        Push((byte)regType);
+    }
+
     public void Pushset_s32(ushort dest, int val) {
-        Push(set_s32);
+        Push(set);
+        Push((byte)0);
         Push(dest);
         Push(val);
     }
 
-    public void PushMath(Opcode instr, byte regType, ushort dest, ushort a, ushort b) {
+    public void Pushset_u32(ushort dest, uint val) {
+        Push(set);
+        Push((byte)1);
+        Push(dest);
+        Push(val);
+    }
+
+    public void Pushset_s64(ushort dest, long val) {
+        Push(set);
+        Push((byte)2);
+        Push(dest);
+        Push(val);
+    }
+
+    public void Pushset_u64(ushort dest, ulong val) {
+        Push(set);
+        Push((byte)3);
+        Push(dest);
+        Push(val);
+    }
+
+    public void Pushset_float(ushort dest, float val) {
+        Push(set);
+        Push((byte)4);
+        Push(dest);
+        Push(val);
+    }
+
+    public void Pushset_double(ushort dest, double val) {
+        Push(set);
+        Push((byte)5);
+        Push(dest);
+        Push(val);
+    }
+
+    public void PushMath(Opcode instr, RegType regType, ushort dest, ushort a, ushort b) {
         Push(instr);
         Push(regType);
         Push(dest);
@@ -86,6 +154,23 @@ public unsafe class CodeUnit {
     public void PushCall(uint index) {
         Push(call);
         Push(index);
+    }
+
+    public void PushCmp(RegType regType, ushort reg0, ushort reg1) {
+        Push(cmp);
+        Push(regType);
+        Push(reg0);
+        Push(reg1);
+    }
+
+    public void PushJump(uint pos) {
+        Push(jmp);
+        Push(pos);
+    }
+
+    public void PushJumpIf(Opcode code, uint pos) {
+        Push(code);
+        Push(pos);
     }
 
     public uint PushMain(ushort regCount) {
@@ -253,6 +338,15 @@ public unsafe class CodeUnit {
 
     public void SetFunctionPos(uint index, uint pos) {
         var offset = FunctionsOffset + 8 * index + 4;
+
+        Bytes[offset]     = (byte)( pos        & 0xFF);
+        Bytes[offset + 1] = (byte)((pos >> 8)  & 0xFF);
+        Bytes[offset + 2] = (byte)((pos >> 16) & 0xFF);
+        Bytes[offset + 3] = (byte)((pos >> 24) & 0xFF);
+    }
+
+    public void SetLabelPos(uint index, uint pos) {
+        var offset = FunctionsOffset + FunctionsCount * 8 + 8 + index * 8;
 
         Bytes[offset]     = (byte)( pos        & 0xFF);
         Bytes[offset + 1] = (byte)((pos >> 8)  & 0xFF);

@@ -28,13 +28,13 @@ public static class BytecodeConverter {
     }
 
     public static CodeUnit AstToBytecode(Ast ast) {
-        var cu       = new CodeUnit(2048);
+        var cu       = new CodeUnit(2048, (uint)ast.Functions.Count, 0);
         var funcs    = DictionaryPool<string, Function>.Get();
-        cu.Push(ast.Functions.Count);
+        // cu.Push(ast.Functions.Count);
         byte funcIndex = 1;
         // push main
-        cu.Push((uint)0);
-        cu.Push((uint)0);
+        // cu.Push((uint)0);
+        // cu.Push((uint)0);
 
         // First pass. Assign indices, gather sizes
         foreach (var func in ast.Functions) {
@@ -44,8 +44,8 @@ public static class BytecodeConverter {
             if (name == "main") {
                 f = new Function(0, 0);
             } else {
-                cu.Push((uint)funcIndex);
-                cu.Push((uint)0);
+                // cu.Push((uint)funcIndex);
+                // cu.Push((uint)0);
                 f = new Function(funcIndex, 0);
                 funcIndex++;
             }
